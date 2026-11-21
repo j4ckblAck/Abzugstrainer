@@ -1,0 +1,1976 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#0f1216">
+<meta name="description" content="Abzugstrainer – Training und Wettkampf mit ESP32-C3 + MPU6050">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Abzugstrainer">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Abzugstrainer</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171b21; --panel2: #1e232b; --line: #2a313b; --text: #e8ebef; --muted: #8d97a5;
+    --accent: #3fb68b; --accent-ink: #06140f; --warn: #e5a03a; --bad: #e0564f; --blue: #4aa3ff; --gold: #e8b931;
+    --bar: #12161b;
+  }
+  :root[data-theme="light"] {
+    --bg: #eef0f3; --panel: #ffffff; --panel2: #f4f6f8; --line: #d7dce2; --text: #12161b; --muted: #5d6773;
+    --accent: #1f8f68; --accent-ink: #ffffff; --warn: #b36f00; --bad: #c0362f; --blue: #1f6fd1; --gold: #b8860b;
+    --bar: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none; }
+  svg.i { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- App-Gerüst: Leiste oben, Seiten, Reiter unten ---------- */
+  .app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; max-width: 640px; margin: 0 auto;
+    background: var(--bg); border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  @media (max-width: 640px) { .app { border: 0; } }
+
+  .topbar { flex: none; display: flex; align-items: center; gap: 6px; padding: calc(8px + env(safe-area-inset-top)) 10px 8px 12px;
+    background: var(--bar); border-bottom: 1px solid var(--line); }
+  .dev { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; background: none; border: 0; padding: 0; color: inherit; cursor: pointer; text-align: left; font: inherit; min-height: 40px; }
+  .devIcon { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none;
+    background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); position: relative; }
+  .devIcon svg.i { width: 18px; height: 18px; }
+  .devIcon.ok { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .devIcon.busy { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .devIcon.busy::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--warn); border-top-color: transparent; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .devText { min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+  .devText b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .devText small { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .iconBtn { width: 40px; height: 40px; min-height: 0; padding: 0; border: 0; background: none; color: var(--text); border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; flex: none; cursor: pointer; }
+  .iconBtn:hover { background: var(--panel2); }
+  .iconBtn.on { color: var(--accent); }
+  .batt { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; padding: 0 4px; }
+  .batt svg { width: 22px; height: 12px; }
+  .batt.low { color: var(--bad); } .batt.mid { color: var(--warn); }
+
+  .pages { flex: 1; min-height: 0; position: relative; }
+  .page { position: absolute; inset: 0; overflow-y: auto; padding: 12px 12px 20px; display: none; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
+  .page.active { display: flex; }
+  #page2 { overflow: hidden; gap: 8px; padding-bottom: 10px; }
+
+  .tabbar { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--bar); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom); }
+  .tabbar button { min-height: 58px; border: 0; border-radius: 0; background: none; color: var(--muted); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 3px; font-size: 11px; font-weight: 600; padding: 4px 0; position: relative; }
+  .tabbar button[aria-current="page"] { color: var(--accent); }
+  .tabbar button[aria-current="page"]::before { content: ""; position: absolute; top: 0; left: 30%; right: 30%; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent); }
+  .tabbar .dotBadge { position: absolute; top: 9px; left: calc(50% + 8px); width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
+
+  /* ---------- Bausteine ---------- */
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { flex: 1; min-height: 44px; border: 1px solid var(--line); background: var(--panel2); color: var(--text);
+    border-radius: 10px; font: inherit; font-weight: 600; padding: 0 14px; cursor: pointer; white-space: nowrap; }
+  .row > button { min-width: 0; padding: 4px 10px; white-space: normal; line-height: 1.2; }
+  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.danger { color: var(--bad); }
+  button.small { flex: none; min-height: 34px; font-size: 13px; padding: 0 12px; }
+  button.big { min-height: 52px; font-size: 17px; }
+  button:disabled { opacity: .4; cursor: default; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; flex: none; }
+  .cardHead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; min-height: 24px; }
+  .cardHead h2, summary h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 0; font-weight: 700; }
+  .cardHead .meta { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .muted { color: var(--muted); }
+  .hint { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+
+  .seg { display: grid; grid-auto-columns: 1fr; grid-auto-flow: column; gap: 4px; background: var(--panel2); border: 1px solid var(--line);
+    border-radius: 12px; padding: 4px; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+    min-height: 40px; border-radius: 9px; cursor: pointer; padding: 4px 6px; font-weight: 650; }
+  .seg input:checked + label { background: var(--panel); color: var(--accent); box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(0,0,0,.18); }
+  .seg input:focus-visible + label { outline: 2px solid var(--blue); }
+
+  .sliderHead { display: flex; justify-content: space-between; align-items: baseline; }
+  .sliderHead b { font-size: 15px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 8px 0 2px; }
+  .ticks { display: grid; grid-template-columns: repeat(3, 1fr); font-size: 12px; color: var(--muted); }
+  .ticks span:nth-child(2) { text-align: center; } .ticks span:nth-child(3) { text-align: right; }
+  .ticks span.on { color: var(--text); font-weight: 700; }
+
+  .field { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .field:first-of-type { border-top: 0; }
+  .field > span small { display: block; color: var(--muted); font-size: 12px; }
+  select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font: inherit; }
+  .switch { position: relative; width: 46px; height: 28px; flex: none; }
+  .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
+  .switch i { position: absolute; inset: 0; border-radius: 99px; background: var(--line); transition: background .2s; }
+  .switch i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+  .switch input:checked + i { background: var(--accent); }
+  .switch input:checked + i::after { transform: translateX(18px); }
+  .switch input:focus-visible + i { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+  details.card { padding: 0; }
+  details > summary { list-style: none; cursor: pointer; padding: 14px; display: flex; align-items: center; gap: 8px; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary h2 { flex: 1; }
+  details > summary .meta { font-size: 12px; color: var(--muted); }
+  details > summary::after { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+    transform: rotate(45deg); margin: 0 4px 4px 6px; flex: none; }
+  details[open] > summary::after { transform: rotate(-135deg); margin-bottom: -4px; }
+  .detBody { padding: 0 14px 14px; }
+
+  /* ---------- Seite 1: Sensor ---------- */
+  .connCard { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 20px 16px 16px; }
+  .bigIcon { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 8px;
+    background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--muted); position: relative; }
+  .bigIcon svg.i { width: 34px; height: 34px; }
+  .bigIcon.ok { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+  .bigIcon.busy { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+  .bigIcon.busy::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 3px solid var(--warn); border-top-color: transparent; animation: spin 1s linear infinite; }
+  .connCard h3 { margin: 0; font-size: 19px; }
+  .connCard p { margin: 0; color: var(--muted); font-size: 14px; }
+  .connCard button { width: 100%; margin-top: 14px; }
+  .dataGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 10px; }
+  .dataGrid div span { display: block; font-size: 12px; color: var(--muted); }
+  .dataGrid div b { font-size: 16px; font-variant-numeric: tabular-nums; }
+  .axes { display: grid; gap: 8px; }
+  .axis { display: grid; grid-template-columns: 1.6em 1fr 4.2em; align-items: center; gap: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .axis b { color: var(--muted); }
+  .axis .track { position: relative; height: 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .axis .track::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--muted); opacity: .5; }
+  .axis .fill { position: absolute; top: 0; bottom: 0; background: var(--blue); }
+  .axis .fill.hit { background: var(--accent); }
+  .axis span { text-align: right; }
+  .evList { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow: auto; font-size: 13px; }
+  .evList li { display: grid; grid-template-columns: 1.4em 1fr auto; gap: 6px; padding: 7px 2px; border-top: 1px solid var(--line); }
+  .evList li:first-child { border-top: 0; }
+  .evList .ok { color: var(--accent); font-weight: 800; } .evList .no { color: var(--bad); font-weight: 800; }
+  .evList .v { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .evList time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .advice { margin-top: 8px; font-size: 13px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--warn) 14%, transparent); }
+  .advice:empty { display: none; }
+  .empty { color: var(--muted); font-size: 14px; padding: 14px 4px 4px; text-align: center; display: block !important; cursor: default !important; }
+
+  /* ---------- Seite 2: Scheibe ---------- */
+  .quick { display: flex; gap: 8px; flex: none; }
+  .qseg { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
+  .qseg input { position: absolute; opacity: 0; pointer-events: none; }
+  .qseg label { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: 46px; border-radius: 9px;
+    cursor: pointer; font-size: 11px; font-weight: 650; color: var(--muted); }
+  .qseg label svg.i { width: 21px; height: 21px; }
+  .qseg input:checked + label { background: var(--panel); color: var(--accent); box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(0,0,0,.18); }
+  .qseg input:checked + label.live { color: var(--warn); }
+  .qseg input:focus-visible + label { outline: 2px solid var(--blue); }
+
+  .banner { flex: none; border-radius: 12px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
+  .banner .bTxt { flex: 1; min-width: 0; }
+  .banner .who { font-size: 17px; font-weight: 800; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .banner .sub { color: var(--muted); font-size: 12.5px; }
+  .banner .sub b { color: var(--accent); }
+  .banner .dots { display: flex; gap: 6px; flex: none; }
+  .banner .dots i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--muted); }
+  .banner .dots i.on { background: var(--accent); border-color: var(--accent); }
+  .banner button { flex: none; min-height: 42px; }
+  .banner.win .who { color: var(--gold); }
+
+  #targetArea { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  #targetBox { position: relative; }
+  canvas#target { width: 100%; height: 100%; display: block; border-radius: 12px; background: #d9d4c7; touch-action: manipulation; }
+  .ov { position: absolute; display: flex; gap: 6px; align-items: center; }
+  .ov.tl { left: 8px; top: 8px; } .ov.tr { right: 8px; top: 8px; }
+  .chip { font-size: 13px; font-weight: 700; background: rgba(15,18,22,.8); color: #fff; padding: 0 10px; height: 32px;
+    border-radius: 8px; border: 0; min-height: 0; flex: none; display: inline-flex; align-items: center; gap: 6px; }
+  .chip:disabled { opacity: 1; cursor: default; }
+  .chip svg { width: 16px; height: 16px; flex: none; }
+  .chip.icon { width: 32px; padding: 0; justify-content: center; }
+  .chip .caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid #fff; opacity: .8; }
+  .result { position: absolute; left: 8px; right: 8px; bottom: 8px; border-radius: 10px; background: rgba(15,18,22,.86); color: #fff;
+    padding: 7px 12px; display: grid; grid-template-columns: auto 1fr; gap: 0 12px; align-items: center; min-height: 11%; }
+  .result .val { font-size: 28px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+  .result .val small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; opacity: .65; margin-top: 3px; text-align: center; }
+  .result .grade { font-size: 16px; font-weight: 800; line-height: 1.2; }
+  .result .grade span { font-weight: 500; font-size: 13px; opacity: .75; margin-left: 6px; color: #fff; }
+  .result .tipLine { font-size: 12.5px; opacity: .85; line-height: 1.25; margin-top: 1px; }
+  .result.empty { grid-template-columns: 1fr; text-align: center; font-size: 14px; padding: 9px 12px; }
+  .g-top { color: #5fe0a8; } .g-good { color: #8fd3ff; } .g-mid { color: #f3b84f; } .g-bad { color: #ff7a72; }
+  .pop { position: absolute; left: 8px; top: 46px; width: min(300px, calc(100% - 16px)); background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); z-index: 5; }
+  .pop .presets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+  .pop .presets button { min-height: 34px; font-size: 13px; padding: 0; }
+  .pop .presets button.on { border-color: var(--accent); color: var(--accent); }
+  .miniBoard { flex: none; display: flex; gap: 6px; overflow-x: auto; }
+  .miniBoard div { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 5px 8px; text-align: center; }
+  .miniBoard div.cur { border-color: var(--accent); }
+  .miniBoard span { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .miniBoard b { font-size: 16px; font-variant-numeric: tabular-nums; }
+
+  /* ---------- Seite 3: Verlauf ---------- */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 8px; }
+  .stats div span { font-size: 12px; color: var(--muted); display: block; }
+  .stats div b { font-size: 17px; font-variant-numeric: tabular-nums; }
+  .shotList { list-style: none; margin: 12px 0 0; padding: 0; border-top: 1px solid var(--line); }
+  .shotList li { display: grid; grid-template-columns: 2.4em 3.4em 1fr auto; gap: 8px; align-items: center; padding: 9px 6px;
+    border-bottom: 1px solid var(--line); cursor: pointer; font-variant-numeric: tabular-nums; border-radius: 6px; }
+  .shotList li:hover { background: var(--panel2); }
+  .shotList li.sel { background: color-mix(in srgb, var(--blue) 14%, transparent); }
+  .shotList .n { color: var(--muted); font-size: 13px; }
+  .shotList .s { font-weight: 800; }
+  .shotList .d { font-size: 13px; }
+  .shotList .m { font-size: 12px; color: var(--muted); }
+  .histList { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+  .histList li { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 9px 2px; border-top: 1px solid var(--line); }
+  .histList li:first-child { border-top: 0; }
+  .histList small { color: var(--muted); grid-column: 1 / -1; font-size: 12px; }
+  .board { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .board th { font-size: 12px; color: var(--muted); font-weight: 600; text-align: right; padding: 4px 6px; }
+  .board th:nth-child(2) { text-align: left; }
+  .board td { padding: 9px 6px; border-top: 1px solid var(--line); text-align: right; }
+  .board td.pl { text-align: center; color: var(--muted); width: 2em; }
+  .board td.nm { text-align: left; font-weight: 650; max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board td.tot { font-weight: 800; font-size: 17px; }
+  .board td.rd { color: var(--muted); font-size: 13px; }
+  .board tr.cur td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .board tr.first td.pl, .board tr.first td.nm { color: var(--gold); font-weight: 800; }
+  .boardWrap { overflow-x: auto; }
+
+  /* ---------- Seite 4: Einstellungen ---------- */
+  .help h3 { font-size: 14px; margin: 14px 0 4px; }
+  .help p, .help li { font-size: 14px; color: var(--muted); }
+  .help ul { padding-left: 18px; margin: 4px 0; }
+  .help b { color: var(--text); }
+
+  /* ---------- Fenster ---------- */
+  .modal { position: fixed; inset: 0; background: rgba(5,7,10,.82); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+  #conn { z-index: 12; }
+  .calBox { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; width: 100%; max-width: 460px; padding: 18px; max-height: 100%; overflow-y: auto; }
+  .calBox h3 { margin: 0; font-size: 17px; }
+  #conn .calBox { max-width: 400px; text-align: center; }
+  .connIcon { width: 56px; height: 56px; margin: 4px auto 12px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
+  .connIcon.lost { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+  .connIcon svg { width: 28px; height: 28px; }
+  .busyBar { height: 4px; border-radius: 99px; background: var(--line); overflow: hidden; margin-top: 14px; position: relative; }
+  .busyBar i { position: absolute; top: 0; bottom: 0; width: 35%; border-radius: 99px; background: var(--blue); animation: busy 1.2s ease-in-out infinite; }
+  @keyframes busy { from { left: -35%; } to { left: 100%; } }
+  .setupGroup { margin-top: 14px; }
+  .setupGroup > span { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .names { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .names input { width: 100%; background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 10px; font: inherit; min-width: 0; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 14px 0 16px; }
+  .steps div { font-size: 11.5px; color: var(--muted); text-align: center; }
+  .steps div::before { content: ""; display: block; height: 4px; border-radius: 99px; background: var(--line); margin-bottom: 6px; }
+  .steps div.active { color: var(--text); font-weight: 700; }
+  .steps div.active::before { background: var(--blue); }
+  .steps div.done::before { background: var(--accent); }
+  .calTitle { font-size: 16px; font-weight: 700; }
+  .calText { font-size: 14px; color: var(--muted); margin-top: 4px; min-height: 40px; }
+  #calAxes { margin-top: 14px; }
+  .calProg { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 14px; }
+  .calProg i { display: block; height: 100%; width: 0; background: var(--accent); }
+  #calCheck { width: 100%; max-width: 220px; aspect-ratio: 1; display: block; margin: 14px auto 0; border-radius: 50%; background: var(--panel2); border: 1px solid var(--line); }
+  .calResult { margin-top: 12px; font-size: 13px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+  .calResult:empty { display: none; }
+  .calErr { margin-top: 12px; font-size: 13px; color: var(--bad); }
+  .calErr:empty { display: none; }
+  #instBar { position: fixed; left: 12px; right: 12px; bottom: calc(70px + env(safe-area-inset-bottom)); z-index: 9; max-width: 460px; margin: 0 auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; box-shadow: 0 8px 28px #0006;
+    display: flex; gap: 12px; align-items: center; }
+  #instBar img { width: 40px; height: 40px; border-radius: 10px; flex: none; }
+  #instBar .t { flex: 1; font-size: 13px; color: var(--muted); line-height: 1.35; }
+  #instBar .t b { display: block; color: var(--text); font-size: 14px; }
+  #instBar .b { display: flex; flex-direction: column; gap: 6px; flex: none; }
+  #toast { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #000d; color: #fff;
+    padding: 9px 16px; border-radius: 10px; font-size: 14px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 20; max-width: 92vw; text-align: center; }
+  #toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<!-- Symbole (einmal definiert, per <use> eingesetzt) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-bt" viewBox="0 0 24 24"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></symbol>
+  <symbol id="i-btoff" viewBox="0 0 24 24"><path d="m7 7 10 10-5 5V2l5 5L7 17"/><path d="M3 3l18 18"/></symbol>
+  <symbol id="i-sensor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="8.5" cy="8" r="3.5"/><path d="M2 21v-1a5 5 0 0 1 5-5h3a5 5 0 0 1 5 5v1"/><circle cx="16.5" cy="7" r="3"/><path d="M17 13.2a5 5 0 0 1 5 4.8v1"/></symbol>
+  <symbol id="i-dry" viewBox="0 0 24 24"><path d="M9 22h6v-9H9z"/><path d="M9 13c0-4.5 3-8 3-8s3 3.5 3 8"/><path d="M8 22h8"/></symbol>
+  <symbol id="i-live" viewBox="0 0 24 24"><path d="M9 22h6v-9H9z" fill="currentColor" fill-opacity=".3"/><path d="M9 13c0-4.5 3-8 3-8s3 3.5 3 8" fill="currentColor"/><path d="M8 22h8M12 0.8v1.6M6.6 2.6l1.2 1.2M17.4 2.6l-1.2 1.2"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></symbol>
+  <symbol id="i-clear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+</svg>
+
+<div class="app">
+  <!-- ================= Leiste oben ================= -->
+  <header class="topbar">
+    <button class="dev" id="devBtn" type="button" aria-label="Sensor-Seite öffnen">
+      <span class="devIcon" id="devIcon"><svg class="i"><use id="devUse" href="#i-btoff"/></svg></span>
+      <span class="devText"><b id="devName">Kein Sensor</b><small id="status">nicht verbunden</small></span>
+    </button>
+    <button id="btnQuick" class="primary small" type="button">Verbinden</button>
+    <span class="batt" id="batt" hidden title="Akku des Sensors">
+      <svg viewBox="0 0 22 12" aria-hidden="true"><rect x="0.75" y="0.75" width="18" height="10.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="19.5" y="3.5" width="2" height="5" rx="1" fill="currentColor"/><rect id="battFill" x="2.5" y="2.5" width="14.5" height="7" rx="1" fill="currentColor"/></svg>
+      <span id="battPct"></span>
+    </span>
+    <button class="iconBtn" id="btnTheme" type="button" aria-label="Hell/Dunkel umschalten"><svg class="i"><use id="themeUse" href="#i-sun"/></svg></button>
+  </header>
+
+  <main class="pages">
+    <!-- ================= 1: Sensor ================= -->
+    <section class="page" id="page1" aria-label="Sensor">
+      <div class="card connCard">
+        <div class="bigIcon" id="bigIcon"><svg class="i"><use id="bigUse" href="#i-btoff"/></svg></div>
+        <h3 id="connName">Kein Sensor verbunden</h3>
+        <p id="connDesc">Sensor einschalten (Taster 2 s halten), dann verbinden.</p>
+        <button id="btnConnect" class="primary big" type="button">Verbinden</button>
+      </div>
+
+      <div class="card" id="sensorData">
+        <div class="cardHead"><h2>Sensordaten</h2><span class="meta" id="fwSync"></span></div>
+        <div class="dataGrid">
+          <div><span>Akku</span><b id="battInfo">–</b></div>
+          <div><span>Datenrate</span><b id="rateInfo">–</b></div>
+          <div><span>Nullpunkt</span><b id="zeroInfo">–</b></div>
+          <div><span>Schüsse erkannt</span><b id="shotInfo">–</b></div>
+        </div>
+        <div class="axes" id="liveAxes" style="margin-top:14px">
+          <div class="axis"><b>X</b><div class="track"><i class="fill"></i></div><span>–</span></div>
+          <div class="axis"><b>Y</b><div class="track"><i class="fill"></i></div><span>–</span></div>
+          <div class="axis"><b>Z</b><div class="track"><i class="fill"></i></div><span>–</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardHead"><h2>Ausrichtung</h2></div>
+        <div class="field"><span>Montage auf der Pistole<small id="axesInfo"></small></span><button id="btnCal" class="small primary">Kalibrieren</button></div>
+        <div class="field"><span>Zurücksetzen<small>Munition und Erkennung auf Standard, Nullpunkt neu</small></span><button id="btnReset" class="small danger">Zurücksetzen</button></div>
+      </div>
+
+      <details class="card" id="detEv">
+        <summary><h2>Erkennung prüfen</h2><span class="meta" id="evCount"></span></summary>
+        <div class="detBody">
+          <p class="hint" style="margin-top:0">Jeder Stoß, den der Sensor bemerkt, mit Ergebnis. Werden echte Abzüge abgelehnt oder zählen Fehlauslösungen, hier nachsehen und die Schuss-Erkennung anpassen.</p>
+          <div class="advice" id="evAdvice"></div>
+          <ul class="evList" id="evList"></ul>
+          <div class="field" style="margin-top:6px"><span>Alles zählen (Test)<small>Jeder Stoß über der Schwelle zählt als Schuss, ohne Prüfung</small></span><label class="switch"><input id="setAll" type="checkbox"><i></i></label></div>
+        </div>
+      </details>
+    </section>
+
+    <!-- ================= 2: Scheibe ================= -->
+    <section class="page" id="page2" aria-label="Scheibe">
+      <div class="quick">
+        <div class="qseg" role="radiogroup" aria-label="Training oder Wettkampf">
+          <input type="radio" name="app" id="appTrain" value="train"><label for="appTrain"><svg class="i"><use href="#i-user"/></svg>Training</label>
+          <input type="radio" name="app" id="appMatch" value="match"><label for="appMatch"><svg class="i"><use href="#i-users"/></svg>Wettkampf</label>
+        </div>
+        <div class="qseg" role="radiogroup" aria-label="Munition">
+          <input type="radio" name="mode" id="modeDry" value="0"><label for="modeDry"><svg class="i"><use href="#i-dry"/></svg>Trocken</label>
+          <input type="radio" name="mode" id="modeLive" value="1"><label for="modeLive" class="live"><svg class="i"><use href="#i-live"/></svg>Scharf</label>
+        </div>
+      </div>
+      <div class="banner" id="banner" hidden></div>
+      <div id="targetArea">
+        <div id="targetBox">
+          <canvas id="target" aria-label="Trefferbild"></canvas>
+          <div class="ov tl">
+            <button class="chip" id="btnDist" type="button" aria-haspopup="true" aria-expanded="false"><span id="distVal"></span><i class="caret" id="distCaret"></i></button>
+          </div>
+          <div class="ov tr">
+            <button class="chip" id="btnZoom" type="button" title="Vergrößern">1×</button>
+            <button class="chip icon" id="btnClear" type="button" title="Scheibe leeren (alle Treffer)" aria-label="Scheibe leeren"><svg class="i"><use href="#i-clear"/></svg></button>
+            <button class="chip icon" id="btnDel" type="button" title="Angezeigten Schuss löschen" aria-label="Schuss löschen"><svg class="i"><use href="#i-trash"/></svg></button>
+            <button class="chip icon" id="btnUndo" type="button" title="Letzten Schuss streichen" aria-label="Letzten Schuss streichen" hidden><svg class="i"><use href="#i-undo"/></svg></button>
+          </div>
+          <div class="pop" id="distPop" hidden>
+            <div class="sliderHead"><span class="muted">Entfernung</span><b id="distVal2"></b></div>
+            <input id="setDist" type="range" min="5" max="50" step="1" aria-label="Entfernung">
+            <div class="ticks"><span>leicht</span><span></span><span>schwer</span></div>
+            <div class="presets" id="distPresets"></div>
+          </div>
+          <div class="result empty" id="result"></div>
+        </div>
+      </div>
+      <div class="miniBoard" id="miniBoard" hidden></div>
+    </section>
+
+    <!-- ================= 3: Verlauf ================= -->
+    <section class="page" id="page3" aria-label="Verlauf">
+      <section class="card" id="matchBoard" hidden>
+        <div class="cardHead"><h2>Punktestand</h2><span class="meta" id="boardMeta"></span><button id="btnEnd" class="small danger">Beenden</button></div>
+        <div class="boardWrap"><table class="board" id="board"></table></div>
+        <div class="row" id="endRow" style="margin-top:12px" hidden>
+          <button id="btnRematch" class="primary">Revanche</button>
+          <button id="btnNewMatch">Neues Spiel</button>
+        </div>
+      </section>
+
+      <section class="card" id="seriesCard">
+        <div class="cardHead"><h2>Aktuelle Serie</h2><span class="meta" id="seriesInfo"></span><button id="btnNew" class="small">Neue Serie</button></div>
+        <div class="stats">
+          <div><span>Schüsse</span><b id="stCount">0</b></div>
+          <div><span>Ringe</span><b id="stSum">–</b></div>
+          <div><span>Ø Ring</span><b id="stAvg">–</b></div>
+          <div><span>Streuung Ø</span><b id="stSpread">–</b></div>
+          <div><span>Treffpunktlage</span><b id="stMpi">–</b></div>
+          <div><span>Bester</span><b id="stBest">–</b></div>
+        </div>
+        <ul class="shotList" id="shotList"></ul>
+      </section>
+
+      <section class="card" id="detHist">
+        <div class="cardHead"><h2>Gespeicherte Serien</h2><span class="meta" id="histCount"></span></div>
+        <ul class="histList" id="histList"></ul>
+        <div class="row" style="margin-top:12px">
+          <button id="btnCsv">Als CSV exportieren</button>
+          <button id="btnHistClear" class="danger">Verlauf löschen</button>
+        </div>
+      </section>
+    </section>
+
+    <!-- ================= 4: Einstellungen ================= -->
+    <section class="page" id="page4" aria-label="Einstellungen">
+      <div class="card">
+        <div class="cardHead"><h2>Schuss-Erkennung</h2></div>
+        <div class="sliderHead"><span class="muted" id="levelMode"></span><b id="levelName"></b></div>
+        <input id="setLevel" type="range" min="0" max="2" step="1" aria-label="Schuss-Erkennung leicht, mittel, schwer">
+        <div class="ticks" id="levelTicks"><span>leicht</span><span>mittel</span><span>schwer</span></div>
+        <p class="hint" id="levelHint"></p>
+      </div>
+      <div class="card">
+        <div class="cardHead"><h2>App</h2></div>
+        <div class="field"><span>Schießhand<small>für die Fehler-Hinweise</small></span>
+          <select id="setHand"><option value="r">rechts</option><option value="l">links</option></select>
+        </div>
+        <div class="field"><span>Ton bei Schuss</span><label class="switch"><input id="setBeep" type="checkbox"><i></i></label></div>
+        <div class="field"><span>Live-Punkt<small>zeigt, wohin die Waffe gerade zeigt</small></span><label class="switch"><input id="setLive" type="checkbox"><i></i></label></div>
+        <div class="field"><span>Live-Punkt-Verhalten<small id="liveModeHint"></small></span>
+          <select id="setLiveMode"><option value="0">zäh</option><option value="1">normal</option><option value="2">direkt</option></select>
+        </div>
+        <div class="field"><span>Schuss-Anzeige<small>wie der Treffer auf der Scheibe gezeigt wird</small></span>
+          <select id="setShotView"><option value="line">Linie zur Mitte</option><option value="trace">Bewegungsverlauf</option></select>
+        </div>
+        <div class="field"><span>Bildschirm anlassen<small>solange verbunden</small></span><label class="switch"><input id="setWake" type="checkbox"><i></i></label></div>
+        <div class="field"><span>Helles Design<small>besser im Freien</small></span><label class="switch"><input id="setLight" type="checkbox"><i></i></label></div>
+        <div class="field" id="installRow"><span>Als App installieren<small id="installInfo">Symbol auf dem Startbildschirm</small></span><button id="btnInstall" class="small primary" hidden>Installieren</button></div>
+      </div>
+      <details class="card help">
+        <summary><h2>Hilfe</h2></summary>
+        <div class="detBody">
+          <h3>So funktioniert's</h3>
+          <p>Der Sensor misst nur die <b>Drehung</b> der Waffe. Beim Schuss schaut die App, wie weit die Mündung beim Abziehen von deinem eigenen Haltepunkt weggewandert ist, und zeigt das auf einer virtuellen Scheibe. Das Ergebnis zeigt also <b>Abzugsfehler</b> – Zielen über Kimme und Korn misst der Sensor nicht.</p>
+          <h3>Seiten</h3>
+          <ul>
+            <li><b>Sensor</b>: verbinden, Akku und Messwerte, Kalibrieren</li>
+            <li><b>Scheibe</b>: Training (1 Person) oder Wettkampf (2–4), trocken oder scharf</li>
+            <li><b>Verlauf</b>: Schüsse der Serie, gespeicherte Serien, Punktestand</li>
+          </ul>
+          <h3>Auf der Scheibe</h3>
+          <ul>
+            <li><b>Blaue Linie</b>: Zielen · <b>lila</b>: letzte 100 ms vor dem Schuss · <b>orange</b>: Nachhalten (nur trocken)</li>
+            <li>Grünes Kreuz: Haltepunkt · grüner Punkt: wohin die Waffe gerade zeigt</li>
+            <li>Oben links die Entfernung antippen, um die Schwierigkeit zu ändern</li>
+          </ul>
+          <h3>Bewertung</h3>
+          <ul>
+            <li><b>perfekt</b> ab 10,3 · <b>sauber</b> ab 9,5 · <b>gut</b> ab 8,5 · <b>mittelmäßig</b> ab 7,0 · darunter <b>verrissen</b></li>
+            <li>Im Wettkampf zählt jeder Schuss 0–100 Punkte (10,9 = 100), pro Durchgang der Schnitt aus 3 Schüssen.</li>
+          </ul>
+          <h3>Akku</h3>
+          <ul>
+            <li>Oben in der Leiste siehst du den Ladestand des Sensors. Unter 15 % kommt ein Hinweis.</li>
+            <li>Bei 3,3 V schaltet sich der Sensor selbst ab, damit der Akku nicht tiefentladen wird.</li>
+          </ul>
+          <h3>Stromsparen</h3>
+          <ul>
+            <li>Liegt die Pistole 5 s still, geht der Sensor in den Ruhemodus (weniger Messungen). Beim Aufnehmen ist er sofort wieder voll da.</li>
+            <li>Er schaltet sich selbst aus: nach 5 min ohne Verbindung oder 15 min ohne Bewegung. Einschalten: Taster 2 s halten.</li>
+          </ul>
+          <h3>Taster am Sensor</h3>
+          <ul>
+            <li>kurz drücken: Bluetooth 2 Minuten sichtbar</li>
+            <li>2 s halten: ausschalten · zum Einschalten 2 s halten</li>
+            <li>8 s halten: Munition und Erkennung auf Standard, Nullpunkt neu (die Ausrichtung bleibt)</li>
+          </ul>
+          <h3>Voraussetzungen</h3>
+          <p>Chrome oder Edge auf Android, Windows, macOS oder Linux, Seite über https. Am iPhone nur mit einem Browser mit Web Bluetooth (z. B. Bluefy). Sensor fest und spielfrei an der Waffe montieren.</p>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <!-- ================= Reiter unten ================= -->
+  <nav class="tabbar" aria-label="Seiten">
+    <button type="button" data-page="1"><svg class="i"><use href="#i-sensor"/></svg>Sensor<i class="dotBadge" id="badge1" hidden></i></button>
+    <button type="button" data-page="2"><svg class="i"><use href="#i-target"/></svg>Scheibe</button>
+    <button type="button" data-page="3"><svg class="i"><use href="#i-chart"/></svg>Verlauf</button>
+    <button type="button" data-page="4"><svg class="i"><use href="#i-gear"/></svg>Einstellungen</button>
+  </nav>
+</div>
+<div id="toast" role="alert"></div>
+
+<!-- Wettkampf einrichten -->
+<div id="matchSheet" class="modal" hidden>
+  <div class="calBox" role="dialog" aria-modal="true" aria-labelledby="matchHead">
+    <h3 id="matchHead">Neuer Wettkampf</h3>
+    <div class="setupGroup">
+      <span>Spieler</span>
+      <div class="seg" role="radiogroup" aria-label="Anzahl Spieler">
+        <input type="radio" name="np" id="np2" value="2"><label for="np2">2</label>
+        <input type="radio" name="np" id="np3" value="3"><label for="np3">3</label>
+        <input type="radio" name="np" id="np4" value="4"><label for="np4">4</label>
+      </div>
+    </div>
+    <div class="setupGroup">
+      <span>Namen</span>
+      <div class="names" id="names"></div>
+    </div>
+    <div class="setupGroup">
+      <span>Durchgänge (je 3 Schüsse pro Spieler)</span>
+      <div class="seg" role="radiogroup" aria-label="Durchgänge">
+        <input type="radio" name="nr" id="nr1" value="1"><label for="nr1">1</label>
+        <input type="radio" name="nr" id="nr3" value="3"><label for="nr3">3</label>
+        <input type="radio" name="nr" id="nr5" value="5"><label for="nr5">5</label>
+        <input type="radio" name="nr" id="nr10" value="10"><label for="nr10">10</label>
+      </div>
+    </div>
+    <p class="hint">Pro Durchgang 3 Schüsse, dafür <b>0 bis 100 Punkte</b> – 100 heißt: alle drei genau in der Mitte. Die Entfernung bleibt während des Spiels für alle gleich.</p>
+    <div class="row" style="margin-top:16px">
+      <button id="btnSetupCancel">Abbrechen</button>
+      <button id="btnStart" class="primary">Spiel starten</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hinweis beim ersten Start: als App installieren -->
+<div id="instBar" hidden role="dialog" aria-labelledby="instTitle">
+  <img src="icon-192.png" alt="">
+  <div class="t"><b id="instTitle">Als App installieren?</b><span id="instText"></span></div>
+  <div class="b"><button id="instGo" class="small primary">Installieren</button><button id="instNo" class="small">Nicht jetzt</button></div>
+</div>
+
+<!-- Verbindungs-Fenster: wenn die Verbindung abreißt -->
+<div id="conn" class="modal" hidden>
+  <div class="calBox" role="alertdialog" aria-modal="true" aria-labelledby="connTitle" aria-describedby="connText">
+    <div class="connIcon" id="connIcon"><svg class="i"><use id="connUse" href="#i-bt"/></svg></div>
+    <h3 id="connTitle"></h3>
+    <div class="calText" id="connText" style="min-height:0;margin-top:6px"></div>
+    <div class="busyBar" id="connBusy"><i></i></div>
+    <div class="row" style="margin-top:18px">
+      <button id="connLater">Später</button>
+      <button id="connGo" class="primary">Verbinden</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kalibrier-Assistent -->
+<div id="cal" class="modal" hidden>
+  <div class="calBox" role="dialog" aria-modal="true" aria-labelledby="calHead">
+    <h3 id="calHead">Sensor kalibrieren</h3>
+    <div class="steps" id="calSteps"><div>Nullpunkt</div><div>Horizontal</div><div>Vertikal</div><div>Prüfen</div></div>
+    <div class="calTitle" id="calTitle"></div>
+    <div class="calText" id="calText"></div>
+    <div class="axes" id="calAxes">
+      <div class="axis"><b>X</b><div class="track"><i class="fill"></i></div><span>0,0°</span></div>
+      <div class="axis"><b>Y</b><div class="track"><i class="fill"></i></div><span>0,0°</span></div>
+      <div class="axis"><b>Z</b><div class="track"><i class="fill"></i></div><span>0,0°</span></div>
+    </div>
+    <canvas id="calCheck" hidden></canvas>
+    <div class="calResult" id="calResult"></div>
+    <div class="calProg" id="calProgWrap"><i id="calProg"></i></div>
+    <div class="calErr" id="calErr"></div>
+    <div class="row" style="margin-top:16px">
+      <button id="calCancel">Abbrechen</button>
+      <button id="calMain" class="primary">Start</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// =====================================================================
+// Bluetooth-Protokoll (muss zur ESP-Firmware passen)
+// =====================================================================
+const SVC_UUID  = "7a3f0001-4b2e-4c8a-9d1e-2f5b6c7d8e90";
+const LIVE_UUID = "7a3f0002-4b2e-4c8a-9d1e-2f5b6c7d8e90"; // notify, 8 Byte, 50 Hz
+const SHOT_UUID = "7a3f0003-4b2e-4c8a-9d1e-2f5b6c7d8e90"; // notify, 20 Byte je Paket
+const CMD_UUID  = "7a3f0004-4b2e-4c8a-9d1e-2f5b6c7d8e90"; // write, 2 Byte
+const EVT_UUID  = "7a3f0005-4b2e-4c8a-9d1e-2f5b6c7d8e90"; // notify, 12 Byte
+
+const CMD = { CAL: 0x01, FILTER: 0x04, MODE: 0x05, LEVEL: 0x06, AXES: 0x07, RESET: 0x7F };
+
+const PRE = 60;                       // Punkte vor dem Schuss (−300 .. −5 ms, 5-ms-Raster)
+const N_POINTS = 72;                  // + 12 Punkte ab dem Schuss (0 .. +55 ms)
+const PTS_PER_CHUNK = 3;
+const N_CHUNKS = N_POINTS / PTS_PER_CHUNK; // 24
+const AIM_FROM = 0, AIM_TO = 40;      // Haltepunkt = Mittel aus −300 .. −105 ms
+const PULL_AT = PRE - 20;             // −100 ms
+const SHOTS_PER_TURN = 3;             // Wettkampf: Schüsse je Spieler und Durchgang
+// Live-Punkt: center = Grundtempo zurück zur Mitte, smooth = Glättung, knee = Stauchung kleiner Ausschläge
+const LIVE_MODES = [
+  { center: 0.04, smooth: 0.10, knee: 0.12 },   // zäh
+  { center: 0.015, smooth: 0.25, knee: 0 },     // normal
+  { center: 0.01, smooth: 0.6, knee: 0 },       // direkt
+];
+const DIST_PRESETS = [10, 15, 25, 50];
+
+// Eine Scheibe (ISSF-Präzisionsscheibe, mm); die Schwierigkeit kommt allein über die Entfernung.
+const TARGET = { r10: 25, step: 25, blackFrom: 7, bullet: 2.8 };
+
+const LEVEL_NAMES = ["leicht", "mittel", "schwer"];
+const LEVEL_HINTS = [
+  [ "Ab ca. 10 g Schlag. Für schwächere Schlagbolzen oder weichere Montage – zählt eher einmal zu viel.",
+    "Standard: ab ca. 12 g, kurzer Schlag längs des Laufs (Glock 17 gemessen: 15–24 g). Durchladen (7–9 g) zählt nicht.",
+    "Ab ca. 13,5 g, nur kurze, kräftige Schläge längs des Laufs. Am wenigsten Fehlauslösungen." ],
+  [ "Ab ca. 8 g Rückstoß, auch für Kleinkaliber (.22).",
+    "Ab ca. 11 g Rückstoß, übliche Kurzwaffen (z. B. 9 mm).",
+    "Ab ca. 13 g und überwiegend längs des Laufs. Am wenigsten Fehlauslösungen." ],
+];
+const REASONS = ["Schuss", "Waffe war in Bewegung", "Stoß zu lang (Anstoßen/Ablegen?)", "Waffe zu stark gedreht", "Stoß nicht längs des Laufs"];
+
+// =====================================================================
+// Speicher und Einstellungen
+// =====================================================================
+const store = {
+  get(key, fallback) { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; } },
+  set(key, val) { try { localStorage.setItem(key, JSON.stringify(val)); return true; } catch (e) { return false; } },
+};
+const defaults = { ver: 3, app: "train", dist: 25, h: "-2", v: "-1", mode: 0, level: 1, live: true,
+  filter: true, hand: "r", beep: true, wake: true, light: false, axesDone: false,
+  np: 2, nr: 3, names: ["", "", "", ""], liveMode: 0, shotView: "line" };
+const settings = Object.assign({}, defaults, store.get("abzug.settings", {}));
+if (settings.ver !== 3) { settings.ver = 3; settings.dist = 25; delete settings.target; delete settings.smooth; delete settings.thr; }
+settings.mode = settings.mode === 1 ? 1 : 0;
+settings.level = Math.min(2, Math.max(0, settings.level | 0));
+settings.dist = Math.min(50, Math.max(5, settings.dist | 0 || 25));
+if (settings.app !== "match") settings.app = "train";
+if (![2, 3, 4].includes(settings.np)) settings.np = 2;
+if (![1, 3, 5, 10].includes(settings.nr)) settings.nr = 3;
+if (!Array.isArray(settings.names) || settings.names.length !== 4) settings.names = ["", "", "", ""];
+if (![0, 1, 2].includes(settings.liveMode)) settings.liveMode = 0;
+if (settings.shotView !== "trace") settings.shotView = "line";
+function saveSettings() { store.set("abzug.settings", settings); }
+
+const $ = id => document.getElementById(id);
+const fmt1 = x => x.toFixed(1).replace(".", ",");
+const fmtMm = mm => (mm < 10 ? fmt1(mm) : Math.round(mm)) + " mm";
+const timeStr = (t, sec) => new Date(t).toLocaleTimeString("de-AT", sec ? { hour: "2-digit", minute: "2-digit", second: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
+const shotPoints = dec => Math.round(dec / 10.9 * 100);   // 0..100 je Schuss
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// =====================================================================
+// Zustand
+// =====================================================================
+let series = store.get("abzug.series", null);
+if (!series || !Array.isArray(series.shots)) series = newSeriesObj();
+let hist = store.get("abzug.history", []);
+if (!Array.isArray(hist)) hist = [];
+let match = store.get("abzug.match", null);
+if (match && (!Array.isArray(match.players) || match.players.length < 2)) match = null;
+let selected = -1;            // Index des angezeigten Schusses, −1 = letzter
+let events = [];              // Erkennungs-Protokoll
+let shotsSeen = 0;
+let zoom = 1;
+const pendingMeta = new Map(); // Schuss-Nr -> Ereignis (kommt vor dem Verlauf)
+
+function newSeriesObj() { return { id: Date.now(), start: Date.now(), shots: [] }; }
+function saveSeries() { if (!store.set("abzug.series", series)) toast("Speicher voll – bitte Verlauf exportieren und löschen"); }
+function saveMatch() { store.set("abzug.match", match); }
+
+// =====================================================================
+// Oberfläche: Einstellungen
+// =====================================================================
+function applyTheme() {
+  document.documentElement.dataset.theme = settings.light ? "light" : "dark";
+  document.querySelector('meta[name=theme-color]').content = settings.light ? "#ffffff" : "#12161b";
+  $("themeUse").setAttribute("href", settings.light ? "#i-moon" : "#i-sun");
+  $("setLight").checked = settings.light;
+}
+applyTheme();
+
+function syncControls() {
+  $("setDist").value = settings.dist;
+  $("setLive").checked = settings.live;
+  $("setAll").checked = !settings.filter;
+  $("setHand").value = settings.hand;
+  $("setBeep").checked = settings.beep;
+  $("setWake").checked = settings.wake;
+  $("setLight").checked = settings.light;
+  $("setLevel").value = settings.level;
+  $("setLiveMode").value = settings.liveMode;
+  $("setShotView").value = settings.shotView;
+  (settings.mode === 1 ? $("modeLive") : $("modeDry")).checked = true;
+  (settings.app === "match" ? $("appMatch") : $("appTrain")).checked = true;
+  $("np" + settings.np).checked = true;
+  $("nr" + settings.nr).checked = true;
+}
+syncControls();
+
+const AX = ["X", "Y", "Z"];
+const axName = s => (s.startsWith("-") ? "−" : "+") + AX[Math.abs(parseInt(s, 10))];
+function showLabels() {
+  const locked = distLocked();
+  $("distVal").textContent = (locked ? match.dist : settings.dist) + " m";
+  $("distVal2").textContent = settings.dist + " m";
+  $("distCaret").hidden = locked;
+  $("btnDist").disabled = locked;
+  $("btnDist").title = locked ? "Während des Spiels fest" : "Entfernung ändern";
+  if (locked) closeDistPop();
+  [...$("distPresets").children].forEach(b => b.classList.toggle("on", +b.dataset.d === settings.dist));
+  $("levelName").textContent = LEVEL_NAMES[settings.level];
+  $("levelMode").textContent = settings.mode === 1 ? "Scharf (mit Munition)" : "Trocken (ohne Munition)";
+  $("liveModeHint").textContent = ["bleibt mittig, kleine Wackler stark gedämpft", "folgt ruhig, Wackeln gut sichtbar", "folgt fast ungefiltert"][settings.liveMode];
+  $("levelHint").textContent = LEVEL_HINTS[settings.mode][settings.level];
+  [...$("levelTicks").children].forEach((s, i) => s.classList.toggle("on", i === settings.level));
+  $("axesInfo").textContent = settings.axesDone
+    ? `horizontal ${axName(settings.h)} · vertikal ${axName(settings.v)} · Lauf ${AX[barrelAxis()]}` : "noch nicht ausgerichtet";
+}
+DIST_PRESETS.forEach(d => {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = d + " m"; b.dataset.d = d;
+  b.onclick = () => { setDistance(d); closeDistPop(); };
+  $("distPresets").appendChild(b);
+});
+function setDistance(d) { settings.dist = d; $("setDist").value = d; saveSettings(); recomputeAll(); }
+$("setDist").oninput = e => { settings.dist = +e.target.value; recomputeAll(); };
+$("setDist").onchange = () => saveSettings();
+function closeDistPop() { $("distPop").hidden = true; $("btnDist").setAttribute("aria-expanded", "false"); }
+$("btnDist").onclick = e => {
+  e.stopPropagation();
+  const open = $("distPop").hidden;
+  $("distPop").hidden = !open; $("btnDist").setAttribute("aria-expanded", String(open));
+};
+document.addEventListener("click", e => { if (!$("distPop").hidden && !$("distPop").contains(e.target)) closeDistPop(); });
+
+$("setLive").onchange = e => { settings.live = e.target.checked; saveSettings(); };
+$("setAll").onchange = e => {
+  settings.filter = !e.target.checked; saveSettings(); sendCmd([CMD.FILTER, settings.filter ? 1 : 0]);
+  if (!settings.filter) toast("Test: jeder Stoß zählt jetzt als Schuss");
+};
+$("setHand").onchange = e => { settings.hand = e.target.value; saveSettings(); updateUi(); };
+$("setBeep").onchange = e => { settings.beep = e.target.checked; saveSettings(); if (settings.beep) { unlockAudio(); beep(); } };
+$("setWake").onchange = e => { settings.wake = e.target.checked; saveSettings(); updateWakeLock(); };
+$("setLight").onchange = e => { settings.light = e.target.checked; saveSettings(); applyTheme(); };
+$("btnTheme").onclick = () => { settings.light = !settings.light; saveSettings(); applyTheme(); };
+$("setLiveMode").onchange = e => { settings.liveMode = +e.target.value; saveSettings(); ema = null; showLabels(); };
+$("setShotView").onchange = e => { settings.shotView = e.target.value; saveSettings(); };
+$("setLevel").oninput = e => { settings.level = +e.target.value; showLabels(); };
+$("setLevel").onchange = () => { saveSettings(); sendCmd([CMD.LEVEL, settings.level]); lastSent = Date.now(); };
+document.querySelectorAll("input[name=mode]").forEach(r => r.onchange = e => {
+  settings.mode = +e.target.value; saveSettings(); sendCmd([CMD.MODE, settings.mode]); lastSent = Date.now(); updateUi();
+});
+document.querySelectorAll("input[name=app]").forEach(r => r.onchange = e => {
+  settings.app = e.target.value; selected = -1; saveSettings(); updateUi();
+});
+$("btnZoom").onclick = () => { zoom = zoom === 1 ? 2 : zoom === 2 ? 4 : 1; $("btnZoom").textContent = zoom + "×"; };
+
+// ----- Seiten (Reiter unten)
+let page = 1;
+function goPage(n) {
+  page = n;
+  document.querySelectorAll(".page").forEach(p => p.classList.toggle("active", p.id === "page" + n));
+  document.querySelectorAll(".tabbar button").forEach(b => b.setAttribute("aria-current", +b.dataset.page === n ? "page" : "false"));
+  closeDistPop();
+  if (n === 2) requestAnimationFrame(resize);
+  renderMatchSheet();
+}
+document.querySelectorAll(".tabbar button").forEach(b => b.onclick = () => goPage(+b.dataset.page));
+$("devBtn").onclick = () => goPage(1);
+
+// ----- Ausrichtung: "-2" = −Z usw. ("-0" = −X); im Sensor als Code Achse·2 + negativ + 1
+function barrelAxis() {
+  const hAx = Math.abs(parseInt(settings.h, 10)), vAx = Math.abs(parseInt(settings.v, 10));
+  return hAx !== vAx ? 3 - hAx - vAx : 0;
+}
+const selToCode = s => Math.abs(parseInt(s, 10)) * 2 + (s.startsWith("-") ? 1 : 0) + 1;
+const codeToSel = c => ((c - 1) & 1 ? "-" : "") + ((c - 1) >> 1);
+const axesByte = () => selToCode(settings.h) | (selToCode(settings.v) << 4);
+function axisPick(sel, a) { return (sel.startsWith("-") ? -1 : 1) * a[Math.abs(parseInt(sel, 10))]; }
+function toHV(a) { return [axisPick(settings.h, a), axisPick(settings.v, a)]; }
+function degToMm(deg, dist) { return Math.tan(deg * Math.PI / 180) * (dist || settings.dist) * 1000; }
+
+// =====================================================================
+// Meldungen, Ton, Bildschirmsperre
+// =====================================================================
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.tm); toast.tm = setTimeout(() => t.classList.remove("show"), 2600);
+}
+function setText(id, text) { const el = $(id); if (el.textContent !== text) el.textContent = text; }
+function setStatus(text, cls) {
+  setText("status", text);
+  const ic = "devIcon " + (cls || ""), bc = "bigIcon " + (cls || "");
+  if ($("devIcon").className !== ic) $("devIcon").className = ic;
+  if ($("bigIcon").className !== bc) {
+    $("bigIcon").className = bc;
+    const ic2 = cls === "ok" || cls === "busy" ? "#i-bt" : "#i-btoff";
+    $("devUse").setAttribute("href", ic2); $("bigUse").setAttribute("href", ic2);
+  }
+  const name = (device && device.name) || (knownDevice && knownDevice.name) || "Kein Sensor";
+  setText("devName", name);
+  setText("connName", cls === "ok" ? name : cls === "busy" ? text.replace(/^./, c => c.toUpperCase()) : "Kein Sensor verbunden");
+  $("btnQuick").hidden = cls === "ok" || cls === "busy";
+  $("badge1").hidden = cls === "ok";
+}
+
+let audioCtx = null;
+function unlockAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch (e) {}
+}
+function beep(freq = 1400, ms = 70, delay = 0) {
+  if (!audioCtx) return;
+  try {
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime + delay;
+    o.frequency.value = freq; o.type = "sine";
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + ms / 1000);
+    o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t + ms / 1000 + 0.02);
+  } catch (e) {}
+}
+document.addEventListener("pointerdown", unlockAudio, { passive: true });
+
+let wakeLock = null;
+async function updateWakeLock() {
+  const want = settings.wake && device && document.visibilityState === "visible";
+  try {
+    if (want && !wakeLock && navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => { wakeLock = null; });
+    } else if (!want && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (e) { wakeLock = null; }
+}
+document.addEventListener("visibilitychange", updateWakeLock);
+
+// =====================================================================
+// Live-Daten
+// =====================================================================
+let live = null;              // [hMm, vMm] relativ zum gleitenden Mittel
+let ema = null;               // gleitendes Mittel der Live-Winkel (h, v in Grad)
+let calFlag = 0, prevRaw = null, prevHV = null, liveCount = 0, lastRate = 0, fwIdle = 0;
+setInterval(() => {                       // Datenrate (Pakete pro Sekunde) als Verbindungsqualität
+  const r = liveCount - lastRate; lastRate = liveCount;
+  setText("rateInfo", !device ? "–" : fwIdle ? r + " Hz (Ruhemodus)" : r + " Hz" + (r < 35 ? " (schwach)" : ""));
+  if (!device) { setText("zeroInfo", "–"); }
+}, 1000);
+let fwAdopted = false, justConnected = false;        // Einstellungen aus dem Sensor nach dem Verbinden übernommen?
+let lastSent = 0;
+// echte Drehung seit Start: das langsame Zurückziehen der Firmware (Leak) wird herausgerechnet
+const LEAK20 = Math.pow(0.99975, 20);   // 20 ms zwischen zwei Live-Paketen
+const rotAcc = [0, 0, 0];
+function onLive(ax, ay, az, flags, axes) {
+  const rawAng = [ax, ay, az];
+  const wasCal = calFlag;
+  calFlag = flags & 1;
+  fwIdle = (flags >> 5) & 1;
+  if (prevRaw && !calFlag) for (let i = 0; i < 3; i++) rotAcc[i] += rawAng[i] - prevRaw[i] * LEAK20;
+  prevRaw = rawAng;
+  const [h, v] = toHV(rawAng);
+  if (!ema) ema = [h, v];
+  // Mitte des Live-Punkts nachführen: beim ruhigen Zielen langsam (Wackeln bleibt sichtbar),
+  // bei großem Ausschlag oder schnellem Schwenk schnell – dann ist man sofort wieder auf der Scheibe
+  const R1 = TARGET.r10 + 9 * TARGET.step;                        // Radius Ring 1 in mm
+  const rel = Math.hypot(degToMm(h - ema[0]), degToMm(v - ema[1])) / R1;   // 1 = Scheibenrand
+  const speed = prevHV ? Math.hypot(degToMm(h - prevHV[0]), degToMm(v - prevHV[1])) / R1 : 0; // je 20 ms
+  prevHV = [h, v];
+  const LM = LIVE_MODES[settings.liveMode];
+  const k = Math.min(0.35, LM.center + 0.3 * Math.min(1, Math.max(0, (rel - 0.5) / 1.0)) + 0.6 * Math.max(0, speed - 0.08));
+  ema[0] += (h - ema[0]) * k;
+  ema[1] += (v - ema[1]) * k;
+  let raw = [degToMm(h - ema[0]), degToMm(v - ema[1])];
+  if (LM.knee) {                     // kleine Ausschläge stark stauchen, große kommen durch
+    const r = Math.hypot(raw[0], raw[1]), c = LM.knee * R1, f = r / (r + c);
+    raw = [raw[0] * f, raw[1] * f];
+  }
+  if (!live) live = raw;
+  live = [live[0] + (raw[0] - live[0]) * LM.smooth, live[1] + (raw[1] - live[1]) * LM.smooth];
+  setStatus(calFlag ? "misst Nullpunkt …" : "verbunden", calFlag ? "busy" : "ok");
+  if (wasCal !== calFlag) renderResult();
+  liveCount++;
+  if (page === 1 && liveCount % 5 === 0) {        // Sensordaten 10× pro Sekunde
+    [...$("liveAxes").children].forEach((row, i) => {
+      const f = row.querySelector(".fill"), val = rawAng[i];
+      const w = Math.min(50, Math.abs(val) / 10 * 50);
+      f.style.left = (val >= 0 ? 50 : 50 - w) + "%"; f.style.width = w + "%";
+      row.querySelector("span").textContent = (val >= 0 ? "+" : "−") + fmt1(Math.abs(val)) + "°";
+    });
+    setText("zeroInfo", calFlag ? "wird gemessen …" : "gemessen");
+  }
+  syncWithSensor(flags, axes);
+}
+// Der Sensor speichert Ausrichtung, Munition, Erkennung und Filter selbst.
+// Beim Verbinden übernimmt die App seine Werte; danach schickt sie ihre Änderungen.
+function syncWithSensor(flags, axes) {
+  const fw = { mode: (flags >> 1) & 1, level: (flags >> 2) & 3, filter: (flags >> 4) & 1 };
+  const h = axes & 0x0F, v = axes >> 4;
+  const fwAxesValid = h >= 1 && h <= 6 && v >= 1 && v <= 6 && (h - 1) >> 1 !== (v - 1) >> 1;
+  if (!fwAdopted) {
+    fwAdopted = true;
+    settings.mode = fw.mode; settings.level = Math.min(2, fw.level); settings.filter = !!fw.filter;
+    if (fwAxesValid) {
+      settings.h = codeToSel(h); settings.v = codeToSel(v); settings.axesDone = true;
+    } else if (settings.axesDone && axes === 0) {
+      sendCmd([CMD.AXES, axesByte()]);          // Ausrichtung aus älterer App-Version in den Sensor übernehmen
+    }
+    lastSent = Date.now();
+    saveSettings(); syncControls(); recomputeAll();
+    if (!settings.axesDone && !calOpen) setTimeout(() => openCal(true), 500);
+    else if (justConnected && page === 1) goPage(2);
+    justConnected = false;
+    return;
+  }
+  const same = fw.mode === settings.mode && fw.level === settings.level && fw.filter === (settings.filter ? 1 : 0)
+    && (!settings.axesDone || axes === axesByte());
+  setText("fwSync", same ? "im Sensor gespeichert" : "wird übertragen …");
+  if (!same && Date.now() - lastSent > 2500) sendAll();
+}
+function sendAll() {
+  lastSent = Date.now();
+  if (settings.axesDone) sendCmd([CMD.AXES, axesByte()]);
+  sendCmd([CMD.FILTER, settings.filter ? 1 : 0]);
+  sendCmd([CMD.MODE, settings.mode]);
+  return sendCmd([CMD.LEVEL, settings.level]);
+}
+
+// =====================================================================
+// Akku (1 Zelle LiPo, Spannung in mV vom Sensor)
+// =====================================================================
+const LIPO = [[3300, 0], [3500, 5], [3600, 10], [3700, 25], [3750, 35], [3800, 45], [3850, 55], [3900, 62], [4000, 75], [4100, 88], [4200, 100]];
+function lipoPercent(mv) {
+  if (mv <= LIPO[0][0]) return 0;
+  for (let i = 1; i < LIPO.length; i++) {
+    const [v1, p1] = LIPO[i];
+    if (mv <= v1) { const [v0, p0] = LIPO[i - 1]; return Math.round(p0 + (p1 - p0) * (mv - v0) / (v1 - v0)); }
+  }
+  return 100;
+}
+let battMv = 0, battWarned = false;
+function onBattery(mv) {
+  if (mv === battMv) return;
+  battMv = mv;
+  showBattery();
+}
+function showBattery() {
+  const valid = device && battMv >= 2500;   // 0 = noch nicht gemessen, darunter kein Akku angeschlossen
+  $("batt").hidden = !valid;
+  if (!valid) { $("battInfo").textContent = device && battMv ? "kein Akku erkannt" : "noch kein Messwert"; return; }
+  const pct = lipoPercent(battMv);
+  $("battPct").textContent = pct + " %";
+  $("battFill").setAttribute("width", (14.5 * Math.max(0.06, pct / 100)).toFixed(1));
+  $("batt").className = "batt" + (pct < 15 ? " low" : pct < 35 ? " mid" : "");
+  $("battInfo").textContent = (battMv / 1000).toFixed(2).replace(".", ",") + " V · " + pct + " %";
+  if (pct < 15 && !battWarned) { battWarned = true; toast("Sensor-Akku fast leer – bald laden"); }
+  if (pct > 25) battWarned = false;
+}
+
+// =====================================================================
+// Schuss auswerten
+// =====================================================================
+function evalShot(shot) {
+  const t = TARGET, dist = shot.dist || settings.dist;
+  const hv = shot.raw.map(toHV);
+  let ah = 0, av = 0;
+  for (let i = AIM_FROM; i < AIM_TO; i++) { ah += hv[i][0]; av += hv[i][1]; }
+  ah /= (AIM_TO - AIM_FROM); av /= (AIM_TO - AIM_FROM);
+  const tr = hv.map(([h, v]) => [degToMm(h - ah, dist), degToMm(v - av, dist)]);
+  // zur Anzeige geglättet (25 ms), aber nicht über den Schusszeitpunkt hinweg
+  shot.trace = tr.map((_, i) => {
+    const lo = i < PRE ? 0 : PRE, hi = i < PRE ? PRE - 1 : tr.length - 1;
+    let sh = 0, sv = 0, n = 0;
+    for (let j = Math.max(lo, i - 2); j <= Math.min(hi, i + 2); j++) { sh += tr[j][0]; sv += tr[j][1]; n++; }
+    return [sh / n, sv / n];
+  });
+  // Treffpunkt: letzter Punkt VOR dem Schlag (0–5 ms davor). Messungen: beim Mucken/Reißen
+  // bewegt sich die Mündung gerade in den letzten 10–20 ms am stärksten – nicht wegmitteln.
+  shot.hit = [tr[PRE - 1][0], tr[PRE - 1][1]];
+  const r = Math.hypot(shot.hit[0], shot.hit[1]);
+  shot.r = r;
+  const sc = score(r, t);
+  shot.ring = sc.ring; shot.dec = sc.dec; shot.pts = shotPoints(sc.dec);
+  let hold = 0;
+  for (let i = AIM_FROM; i < AIM_TO; i++) hold += Math.hypot(tr[i][0], tr[i][1]);
+  shot.hold = hold / (AIM_TO - AIM_FROM);
+  const p100 = [0, 1, 2].map(d => tr[PULL_AT - 1 + d]).reduce((a, p) => [a[0] + p[0] / 3, a[1] + p[1] / 3], [0, 0]);
+  shot.pullVec = [shot.hit[0] - p100[0], shot.hit[1] - p100[1]];
+  shot.pull = Math.hypot(shot.pullVec[0], shot.pullVec[1]);
+  // dieselbe Bewegung in Grad (unabhängig von der Entfernung) für die Fehler-Hinweise
+  shot.pullDeg = Math.atan(shot.pull / (dist * 1000)) * 180 / Math.PI;
+  let fol = 0;
+  for (let i = PRE; i < N_POINTS; i++) fol = Math.max(fol, Math.hypot(tr[i][0] - shot.hit[0], tr[i][1] - shot.hit[1]));
+  shot.follow = fol;
+  shot.dir = dirText(shot.hit[0], shot.hit[1], r, t);
+}
+
+// Ringwert mit Zehnteln; ein Treffer zählt den Ring, dessen Linie das Geschoss berührt
+function score(r, t) {
+  const rr = Math.max(0, r - t.bullet);
+  if (rr <= t.r10) return { ring: 10, dec: Math.min(10.9, 10 + Math.floor(10 * (1 - rr / t.r10) + 1e-9) / 10) };
+  const k = (rr - t.r10) / t.step;
+  const ring = 10 - Math.ceil(k);
+  if (ring < 1) return { ring: 0, dec: 0 };
+  const frac = k - (Math.ceil(k) - 1);          // 0 = innen am Ring, 1 = außen
+  return { ring, dec: ring + Math.floor(10 * (1 - frac) + 1e-9) / 10 };
+}
+function clockOf(h, v) {
+  let a = Math.atan2(h, v) * 180 / Math.PI; if (a < 0) a += 360;
+  const hr = Math.round(a / 30) % 12;
+  return hr === 0 ? 12 : hr;
+}
+function dirText(h, v, r, t) {
+  if (r <= t.bullet + t.r10 * 0.5) return "zentral";
+  const parts = [];
+  if (Math.abs(v) > r * 0.38) parts.push(v > 0 ? "hoch" : "tief");
+  if (Math.abs(h) > r * 0.38) parts.push(h > 0 ? "rechts" : "links");
+  return parts.join(" ");
+}
+const GRADE_COLORS = { "g-top": "#2fbf85", "g-good": "#3d9be0", "g-mid": "#e5a03a", "g-bad": "#e0564f" };
+// Bewertung in Worten
+function grade(dec) {
+  if (dec >= 10.3) return { word: "perfekt", cls: "g-top" };
+  if (dec >= 9.5) return { word: "sauber", cls: "g-top" };
+  if (dec >= 8.5) return { word: "gut", cls: "g-good" };
+  if (dec >= 7.0) return { word: "mittelmäßig", cls: "g-mid" };
+  return { word: "verrissen", cls: "g-bad" };
+}
+// kurze Fehler-Hinweise nach Richtung (Rechtshänder; für Linkshänder gespiegelt)
+const CAUSES = {
+  12: "Handgelenk kippt hoch – Rückstoß erwartet", 1: "Handballen schiebt – Rückstoß erwartet", 2: "Handballen schiebt – Rückstoß erwartet",
+  3: "Daumen drückt mit", 4: "Finger verkrampfen beim Abziehen", 5: "Finger verkrampfen beim Abziehen",
+  6: "Mucken – Handgelenk knickt ab", 7: "Abzug gerissen", 8: "Abzug gerissen",
+  9: "Zu viel Finger im Abzug", 10: "Hand schiebt beim Abziehen", 11: "Hand schiebt beim Abziehen",
+};
+// Messungen am Abzugstrainer: sauber abgezogen bewegt sich die Mündung in den letzten 100 ms
+// kaum (< 0,05°), beim Mucken/Reißen 0,2–2,5°. Ab PULL_DEG_TIP gilt der Abzug als verrissen –
+// der Hinweis richtet sich dann nach der Richtung dieser Bewegung, nicht nach der Trefferlage.
+const PULL_DEG_TIP = 0.12;
+function coachTip(s) {
+  const jerk = s.pullVec && s.pullDeg >= PULL_DEG_TIP && s.pull > s.hold * 1.3;
+  if (s.dec >= 9.5 && !jerk) return "";
+  if (!jerk && s.pull <= s.hold * 1.3) return "Unruhig gehalten – erst bei ruhiger Waffe abziehen";
+  let hr = jerk ? clockOf(s.pullVec[0], s.pullVec[1]) : clockOf(s.hit[0], s.hit[1]);
+  if (settings.hand === "l") hr = hr === 12 ? 12 : 12 - hr;
+  return CAUSES[hr];
+}
+
+function addShot(raw, meta) {
+  const shot = { raw, t: Date.now(), mode: settings.mode, level: settings.level, meta: meta || null };
+  if (settings.app === "match") {
+    if (!match || match.state === "done") { toast("Erst einen Wettkampf starten"); return; }
+    if (match.state === "wait") { toast("Schuss ignoriert – erst „Bereit“ drücken"); return; }
+    shot.dist = match.dist;
+    evalShot(shot);
+    matchShot(shot);
+  } else {
+    evalShot(shot);
+    series.shots.push(shot);
+    saveSeries();
+    if (settings.beep) beep(shot.ring >= 9 ? 1600 : 1100);
+  }
+  selected = -1;
+  ema = null;
+  if (navigator.vibrate) navigator.vibrate(40);
+  updateUi();
+}
+// Entfernung/Ausrichtung geändert: Trainings-Serie neu rechnen (Wettkampf-Schüsse behalten ihre Entfernung)
+function recomputeAll() { series.shots.forEach(evalShot); ema = null; updateUi(); }
+
+// =====================================================================
+// Wettkampf (2–4 Spieler)
+// =====================================================================
+function renderNameInputs() {
+  const box = $("names");
+  if (box.children.length === settings.np) return;   // Eingabefelder nicht beim Tippen neu bauen
+  box.innerHTML = "";
+  for (let i = 0; i < settings.np; i++) {
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.maxLength = 16; inp.placeholder = "Spieler " + (i + 1); inp.value = settings.names[i] || "";
+    inp.setAttribute("aria-label", "Name Spieler " + (i + 1));
+    inp.oninput = () => { settings.names[i] = inp.value.trim(); saveSettings(); };
+    box.appendChild(inp);
+  }
+}
+document.querySelectorAll("input[name=np]").forEach(r => r.onchange = e => { settings.np = +e.target.value; saveSettings(); renderNameInputs(); });
+document.querySelectorAll("input[name=nr]").forEach(r => r.onchange = e => { settings.nr = +e.target.value; saveSettings(); });
+
+function startMatch(players) {
+  match = {
+    id: Date.now(), dist: settings.dist, rounds: settings.nr, round: 0, player: 0, state: "wait",
+    players: players.map(name => ({ name, turns: [] })), turn: [], view: [], last: null, prev: null,
+  };
+  selected = -1; saveMatch(); goPage(2); updateUi();
+}
+$("btnStart").onclick = () => {
+  unlockAudio();
+  const names = [];
+  for (let i = 0; i < settings.np; i++) names.push(settings.names[i] || "Spieler " + (i + 1));
+  startMatch(names);
+};
+$("btnRematch").onclick = () => { if (match) startMatch(match.players.map(p => p.name)); };
+$("btnNewMatch").onclick = () => { match = null; saveMatch(); goPage(2); updateUi(); };
+$("btnEnd").onclick = () => {
+  if (!match) return;
+  if (match.state !== "done" && !confirm("Spiel abbrechen? Der Punktestand geht verloren.")) return;
+  match = null; saveMatch(); updateUi();
+};
+function matchReady() {
+  if (!match || match.state !== "wait") return;
+  unlockAudio();
+  match.state = "shoot"; match.turn = []; match.view = []; selected = -1;
+  saveMatch(); updateUi();
+}
+const slim = s => ({ dec: s.dec, ring: s.ring, pts: s.pts, hit: s.hit, t: s.t });
+function snapshot() { const c = Object.assign({}, match); delete c.prev; return JSON.stringify(c); }
+
+function matchShot(shot) {
+  match.prev = snapshot();
+  match.turn.push(shot);
+  match.view = match.turn;
+  if (settings.beep) beep(shot.ring >= 9 ? 1600 : 1100);
+  if (match.turn.length < SHOTS_PER_TURN) { saveMatch(); return; }
+  const pts = Math.round(match.turn.reduce((a, s) => a + s.pts, 0) / match.turn.length);
+  const p = match.players[match.player];
+  p.turns.push({ pts, shots: match.turn.map(slim) });
+  match.last = { player: match.player, pts };
+  match.view = match.turn; match.turn = [];
+  match.player++;
+  if (match.player >= match.players.length) { match.player = 0; match.round++; }
+  if (match.round >= match.rounds) {
+    match.state = "done";
+    if (settings.beep) { beep(1200, 120); beep(1500, 120, 0.15); beep(1900, 220, 0.3); }
+  } else {
+    match.state = "wait";
+    if (settings.beep) beep(900, 90, 0.12);
+  }
+  toast(`${p.name}: ${pts} Punkte`);
+  saveMatch();
+}
+$("btnUndo").onclick = () => {
+  if (!match || !match.prev) return;
+  match = Object.assign(JSON.parse(match.prev), { prev: null });
+  selected = -1; saveMatch(); updateUi(); toast("Letzter Schuss gestrichen");
+};
+
+function ranking() {
+  const rows = match.players.map((p, i) => ({ i, name: p.name, total: p.turns.reduce((a, t) => a + t.pts, 0), turns: p.turns }));
+  const sorted = rows.slice().sort((a, b) => b.total - a.total);
+  sorted.forEach((r, k) => { r.place = k > 0 && r.total === sorted[k - 1].total ? sorted[k - 1].place : k + 1; });
+  return sorted;
+}
+function distLocked() { return settings.app === "match" && !!match && match.state !== "done"; }
+
+// Fenster "Neuer Wettkampf": offen, solange Wettkampf gewählt, aber kein Spiel läuft (auf Scheibe/Verlauf)
+function renderMatchSheet() {
+  const show = settings.app === "match" && !match && (page === 2 || page === 3);
+  if (show && $("matchSheet").hidden) renderNameInputs();
+  $("matchSheet").hidden = !show;
+}
+$("btnSetupCancel").onclick = () => { settings.app = "train"; saveSettings(); syncControls(); selected = -1; updateUi(); };
+
+function renderMatch() {
+  const banner = $("banner");
+  const isMatch = settings.app === "match";
+  renderMatchSheet();
+  $("matchBoard").hidden = !isMatch || !match;
+  $("seriesCard").hidden = isMatch;
+  $("detHist").hidden = isMatch;
+  $("btnDel").hidden = isMatch || !series.shots.length;
+  $("btnClear").hidden = isMatch || !series.shots.length;
+  $("btnUndo").hidden = !isMatch || !match || !match.prev;
+  banner.hidden = !isMatch || !match;
+  $("miniBoard").hidden = !isMatch || !match;
+  if (!isMatch || !match) { requestAnimationFrame(resize); return; }
+  $("btnEnd").textContent = match.state === "done" ? "Schließen" : "Beenden";
+  const cur = match.players[match.player];
+  const rTxt = `Durchgang ${Math.min(match.round + 1, match.rounds)}/${match.rounds}`;
+  banner.className = "banner" + (match.state === "done" ? " win" : "");
+  banner.innerHTML = "";
+  const txt = document.createElement("div"); txt.className = "bTxt"; banner.appendChild(txt);
+  const el = (parent, tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; parent.appendChild(e); return e; };
+  if (match.state === "done") {
+    const rk = ranking(), winners = rk.filter(r => r.place === 1);
+    el(txt, "div", "who", winners.length > 1 ? "Unentschieden" : winners[0].name + " gewinnt");
+    el(txt, "div", "sub", winners.map(w => w.name).join(" & ") + " mit " + winners[0].total + " Punkten");
+    el(banner, "button", "primary", "Revanche").onclick = () => $("btnRematch").click();
+  } else if (match.state === "wait") {
+    el(txt, "div", "who", cur.name + " ist dran");
+    const sub = el(txt, "div", "sub", rTxt);
+    if (match.last) {
+      sub.append(" · " + match.players[match.last.player].name + ": ");
+      const b = document.createElement("b"); b.textContent = match.last.pts + " P"; sub.appendChild(b);
+    }
+    el(banner, "button", "primary", "Bereit").onclick = matchReady;
+  } else {
+    el(txt, "div", "who", cur.name);
+    el(txt, "div", "sub", rTxt + " · Schuss " + (match.turn.length + 1) + " von " + SHOTS_PER_TURN);
+    const dots = el(banner, "div", "dots");
+    for (let i = 0; i < SHOTS_PER_TURN; i++) { const d = document.createElement("i"); if (i < match.turn.length) d.className = "on"; dots.appendChild(d); }
+  }
+  // kleine Punkteleiste unter der Scheibe
+  const mb = $("miniBoard"); mb.innerHTML = "";
+  match.players.forEach((p, i) => {
+    const d = document.createElement("div");
+    if (match.state !== "done" && i === match.player) d.className = "cur";
+    const n = document.createElement("span"); n.textContent = p.name;
+    const b = document.createElement("b"); b.textContent = p.turns.reduce((a, t) => a + t.pts, 0);
+    d.append(n, b); mb.appendChild(d);
+  });
+  requestAnimationFrame(resize);
+  const tbl = $("board"); tbl.innerHTML = "";
+  const head = tbl.insertRow();
+  const th = txt => { const c = document.createElement("th"); c.textContent = txt; head.appendChild(c); };
+  th("#"); th("Spieler");
+  const showRounds = match.rounds <= 5;
+  if (showRounds) for (let r = 0; r < match.rounds; r++) th("D" + (r + 1));
+  th("Gesamt");
+  ranking().forEach(r => {
+    const tr = tbl.insertRow();
+    if (match.state !== "done" && r.i === match.player) tr.className = "cur";
+    if (r.place === 1 && r.total > 0) tr.classList.add("first");
+    const td = (cls, txt) => { const c = tr.insertCell(); c.className = cls; c.textContent = txt; };
+    td("pl", r.place + ".");
+    td("nm", r.name);
+    if (showRounds) for (let k = 0; k < match.rounds; k++) td("rd", r.turns[k] ? r.turns[k].pts : "–");
+    td("tot", r.total);
+  });
+  $("boardMeta").textContent = match.dist + " m · max. " + match.rounds * 100;
+  $("endRow").hidden = match.state !== "done";
+}
+
+// =====================================================================
+// Anzeige
+// =====================================================================
+function viewShots() {
+  if (settings.app !== "match") return series.shots;
+  if (!match) return [];
+  return match.state === "shoot" ? match.turn : match.view || [];
+}
+function viewIndex(shots) { return selected >= 0 && selected < shots.length ? selected : shots.length - 1; }
+
+// Ergebnis-Leiste auf der Scheibe
+function renderResult() {
+  const box = $("result");
+  const shots = viewShots(), idx = viewIndex(shots), s = shots[idx];
+  box.innerHTML = "";
+  if (!s || !s.trace) {
+    box.className = "result empty";
+    box.textContent = !device ? "Sensor verbinden, dann zielen und abziehen"
+      : settings.app === "match" && !match ? "Spieler wählen und Spiel starten"
+      : settings.app === "match" && match.state === "wait" ? "Erst „Bereit“ drücken"
+      : settings.app === "match" && match.state === "done" ? "Spiel beendet"
+      : calFlag ? "Waffe ruhig halten – Nullpunkt wird gemessen" : "Bereit – zielen und abziehen";
+    return;
+  }
+  const g = grade(s.dec), tip = coachTip(s);
+  box.className = "result";
+  const val = document.createElement("div"); val.className = "val";
+  val.textContent = fmt1(s.dec);
+  const sm = document.createElement("small");
+  sm.textContent = settings.app === "match" ? s.pts + " P" : (idx < shots.length - 1 ? "Schuss " + (idx + 1) : "Ring");
+  val.appendChild(sm);
+  const info = document.createElement("div");
+  const gr = document.createElement("div"); gr.className = "grade " + g.cls; gr.textContent = g.word;
+  if (s.dir !== "zentral") { const d = document.createElement("span"); d.textContent = s.dir; gr.appendChild(d); }
+  info.appendChild(gr);
+  if (tip) { const tl = document.createElement("div"); tl.className = "tipLine"; tl.textContent = tip; info.appendChild(tl); }
+  box.append(val, info);
+}
+
+function updateUi() {
+  renderMatch();
+  renderResult();
+  if (settings.app !== "match") renderSeries();
+  renderHistory();
+  showLabels();
+  $("btnNew").disabled = !series.shots.length;
+}
+
+function renderSeries() {
+  const shots = series.shots, t = TARGET, idx = viewIndex(shots);
+  $("stCount").textContent = shots.length;
+  if (shots.length) {
+    const sum = shots.reduce((a, x) => a + x.ring, 0);
+    const sumDec = shots.reduce((a, x) => a + x.dec, 0);
+    $("stSum").textContent = sum + " (" + fmt1(sumDec) + ")";
+    $("stAvg").textContent = fmt1(sumDec / shots.length);
+    const ch = shots.reduce((a, x) => a + x.hit[0], 0) / shots.length;
+    const cv = shots.reduce((a, x) => a + x.hit[1], 0) / shots.length;
+    const spread = shots.reduce((a, x) => a + Math.hypot(x.hit[0] - ch, x.hit[1] - cv), 0) / shots.length;
+    $("stSpread").textContent = shots.length > 1 ? fmtMm(spread) : "–";
+    const mr = Math.hypot(ch, cv);
+    $("stMpi").textContent = mr < t.r10 ? "mittig" : dirText(ch, cv, mr, t) || "mittig";
+    $("stBest").textContent = fmt1(Math.max(...shots.map(x => x.dec)));
+  } else { ["stSum", "stAvg", "stSpread", "stMpi", "stBest"].forEach(id => $(id).textContent = "–"); }
+  $("seriesInfo").textContent = "seit " + timeStr(series.start);
+
+  const list = $("shotList"); list.innerHTML = "";
+  if (!shots.length) {
+    const li = document.createElement("li"); li.className = "empty";
+    li.textContent = "Die Schüsse dieser Serie erscheinen hier."; list.appendChild(li);
+  }
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const x = shots[i], g = grade(x.dec);
+    const li = document.createElement("li");
+    if (i === idx) li.classList.add("sel");
+    li.innerHTML = `<span class="n">${i + 1}.</span><span class="s">${fmt1(x.dec)}</span><span class="d"></span><span class="m"></span>`;
+    li.querySelector(".d").textContent = g.word;
+    li.querySelector(".m").textContent = x.dir;
+    li.onclick = () => { selected = i === shots.length - 1 ? -1 : i; updateUi(); };
+    list.appendChild(li);
+  }
+}
+
+// Scheibe leeren: alle Treffer weg; die Serie bleibt im Verlauf (dort einzeln löschbar)
+$("btnClear").onclick = () => {
+  const n = series.shots.length;
+  if (!n) return;
+  if (!confirm(`Scheibe leeren? ${n === 1 ? "Der Treffer wird" : `Alle ${n} Treffer werden`} entfernt und die Serie im Verlauf gespeichert.`)) return;
+  archiveSeries();
+  series = newSeriesObj(); selected = -1; saveSeries(); updateUi();
+  toast("Scheibe geleert");
+};
+$("btnDel").onclick = () => {
+  const shots = series.shots;
+  if (!shots.length) return;
+  const idx = viewIndex(shots);
+  if (!confirm(`Schuss ${idx + 1} (${fmt1(shots[idx].dec)}) löschen?`)) return;
+  shots.splice(idx, 1); selected = -1; saveSeries(); updateUi();
+};
+
+// =====================================================================
+// Erkennungs-Protokoll
+// =====================================================================
+function onEvent(d) {
+  if (d.byteLength < 12) return;
+  const ev = {
+    t: Date.now(), kind: d.getUint8(0), reason: d.getUint8(1), peak: d.getUint16(2, true) / 100,
+    dur: d.getUint8(4), share: d.getUint8(5), gyro: d.getUint16(6, true), motion: d.getUint16(8, true),
+    no: d.getUint8(10), mode: d.getUint8(11) & 0x0F, level: d.getUint8(11) >> 4,
+  };
+  events.unshift(ev);
+  if (events.length > 40) events.pop();
+  if (ev.kind === 1) {
+    shotsSeen++; setText("shotInfo", String(shotsSeen));
+    pendingMeta.set(ev.no, ev);
+    if (pendingMeta.size > 8) pendingMeta.delete(pendingMeta.keys().next().value);
+  }
+  renderEvents();
+}
+function renderEvents() {
+  const ul = $("evList"); ul.innerHTML = "";
+  const nOk = events.filter(e => e.kind === 1).length;
+  $("evCount").textContent = events.length ? `${nOk} erkannt · ${events.length - nOk} abgelehnt` : "";
+  if (!events.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "Noch keine Stöße erkannt."; ul.appendChild(li); }
+  events.slice(0, 25).forEach(e => {
+    const li = document.createElement("li");
+    const ok = e.kind === 1;
+    li.innerHTML = `<span class="${ok ? "ok" : "no"}">${ok ? "✓" : "✗"}</span><span><span class="r"></span><br><span class="v"></span></span><time></time>`;
+    li.querySelector(".r").textContent = ok ? "Schuss erkannt" : REASONS[e.reason] || "abgelehnt";
+    li.querySelector(".v").textContent = `${fmt1(e.peak)} g` + (e.dur ? ` · ${e.dur} ms` : "") + ` · Lauf ${e.share} % · Drehung ${e.gyro} °/s` + (e.reason === 1 ? ` · Bewegung ${e.motion} °/s` : "");
+    li.querySelector("time").textContent = timeStr(e.t, true);
+    ul.appendChild(li);
+  });
+  const recent = events.filter(e => Date.now() - e.t < 120000 && e.kind === 2);
+  const count = r => recent.filter(e => e.reason === r).length;
+  let advice = "";
+  if (count(4) >= 3) advice = "Mehrfach „nicht längs des Laufs“: Sensor neu ausrichten (Einstellungen → Sensor) oder Schuss-Erkennung auf „leicht“ stellen.";
+  else if (count(2) >= 3 && settings.mode === 0) advice = "Mehrfach „zu lang“: Wenn das echte Abzüge waren, Schuss-Erkennung auf „leicht“ stellen. Sitzt der Sensor fest?";
+  else if (count(3) >= 3 && settings.mode === 0) advice = "Mehrfach „zu stark gedreht“: Waffe beim Abziehen ruhiger halten oder Schuss-Erkennung auf „leicht“ stellen.";
+  else if (count(1) >= 4) advice = "Viele Stöße während der Bewegung – das ist normal beim Hantieren und wird absichtlich ignoriert.";
+  $("evAdvice").textContent = advice;
+}
+
+// =====================================================================
+// Verlauf (Training)
+// =====================================================================
+function seriesSummary(sr) {
+  return {
+    id: sr.id, start: sr.start, end: Date.now(), dist: settings.dist,
+    mode: sr.shots.every(s => s.mode === sr.shots[0].mode) ? sr.shots[0].mode : 2, // 2 = gemischt
+    shots: sr.shots.map(s => ({ t: s.t, ring: s.ring, dec: s.dec, h: +s.hit[0].toFixed(1), v: +s.hit[1].toFixed(1),
+      hold: +s.hold.toFixed(1), pull: +s.pull.toFixed(1), follow: +s.follow.toFixed(1), mode: s.mode, level: s.level })),
+  };
+}
+function archiveSeries() {
+  if (!series.shots.length) return;
+  hist.unshift(seriesSummary(series));
+  if (hist.length > 200) hist.length = 200;
+  while (!store.set("abzug.history", hist) && hist.length > 1) hist.pop();
+}
+function renderHistory() {
+  const ul = $("histList"); ul.innerHTML = "";
+  $("histCount").textContent = hist.length ? hist.length + " Serien" : "";
+  if (!hist.length) { const li = document.createElement("li"); li.className = "empty"; li.textContent = "Mit „Neue Serie“ wird die aktuelle Serie hier abgelegt."; ul.appendChild(li); return; }
+  hist.slice(0, 30).forEach(h => {
+    const n = h.shots.length, sum = h.shots.reduce((a, s) => a + s.dec, 0);
+    const li = document.createElement("li");
+    li.innerHTML = `<span></span><b></b><small></small>`;
+    li.children[0].textContent = new Date(h.start).toLocaleDateString("de-AT") + " " + timeStr(h.start);
+    li.children[1].textContent = "Ø " + fmt1(sum / n);
+    li.children[2].textContent = `${n} Schüsse · ${fmt1(sum)} Ringe · ${["trocken", "scharf", "gemischt"][h.mode] || ""} · ${h.dist} m`;
+    ul.appendChild(li);
+  });
+}
+function exportCsv() {
+  const all = series.shots.length ? [seriesSummary(series), ...hist] : hist.slice();
+  if (!all.length) { toast("Noch keine Schüsse zum Exportieren"); return; }
+  const rows = [["Serie", "Datum", "Uhrzeit", "Nr", "Munition", "Erkennung", "Entfernung_m", "Ring", "Wert", "Horizontal_mm", "Vertikal_mm", "Halten_mm", "Abziehen_mm", "Nachhalten_mm"]];
+  const num = x => String(x).replace(".", ",");
+  all.slice().reverse().forEach((h, si) => {
+    h.shots.forEach((s, i) => {
+      const d = new Date(s.t);
+      rows.push([si + 1, d.toLocaleDateString("de-AT"), d.toLocaleTimeString("de-AT"), i + 1, s.mode === 1 ? "scharf" : "trocken",
+        LEVEL_NAMES[s.level] || "", h.dist, s.ring, num(s.dec), num(s.h), num(s.v), num(s.hold), num(s.pull), s.mode === 1 ? "" : num(s.follow)]);
+    });
+  });
+  const csv = "﻿" + rows.map(r => r.join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  a.download = "abzugstrainer-" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$("btnCsv").onclick = exportCsv;
+$("btnHistClear").onclick = () => {
+  if (!hist.length) return;
+  if (!confirm("Gesamten Verlauf (" + hist.length + " Serien) löschen? Tipp: vorher als CSV exportieren.")) return;
+  hist = []; store.set("abzug.history", hist); renderHistory(); toast("Verlauf gelöscht");
+};
+$("btnNew").onclick = () => {
+  if (!series.shots.length) return;
+  archiveSeries();
+  series = newSeriesObj(); selected = -1; saveSeries(); updateUi();
+  toast("Serie im Verlauf gespeichert");
+};
+
+// =====================================================================
+// Zeichnen
+// =====================================================================
+const cv = $("target"), ctx = cv.getContext("2d");
+const CANVAS_RATIO = 1.2;            // unten Platz für die Ergebnis-Leiste
+function resize() {
+  const area = $("targetArea"), box = $("targetBox");
+  const aw = area.clientWidth, ah = area.clientHeight;
+  if (!aw || !ah) return;                                  // Seite gerade nicht sichtbar
+  const cssW = Math.floor(Math.min(aw, ah / CANVAS_RATIO));
+  box.style.width = cssW + "px"; box.style.height = Math.floor(cssW * CANVAS_RATIO) + "px";
+  const w = Math.round(cssW * (window.devicePixelRatio || 1));
+  if (w > 0 && w !== cv.width) { cv.width = w; cv.height = Math.round(w * CANVAS_RATIO); }
+}
+window.addEventListener("resize", resize);
+if (window.ResizeObserver) new ResizeObserver(resize).observe($("targetArea"));
+resize();
+
+function draw() {
+  const t = TARGET;
+  const W = cv.width, H = cv.height, c = W / 2;
+  const rOuter = t.r10 + 9 * t.step;
+  const k = (W * 0.47) / rOuter * zoom;        // mm -> Pixel
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#d9d4c7"; ctx.fillRect(0, 0, W, H);
+  const fs = Math.round(W / 34);
+  for (let ring = 1; ring <= 10; ring++) {
+    const r = (t.r10 + (10 - ring) * t.step) * k;
+    const black = ring >= t.blackFrom;
+    ctx.beginPath(); ctx.arc(c, c, r, 0, Math.PI * 2);
+    ctx.fillStyle = black ? "#1a1a1a" : "#f4f1ea"; ctx.fill();
+    ctx.lineWidth = Math.max(1, W / 500);
+    ctx.strokeStyle = black ? "#f4f1ea" : "#1a1a1a"; ctx.stroke();
+    const rm = r - t.step * k / 2;
+    if (ring <= 9 && rm > fs * 0.8 && rm < W * 0.48) {
+      ctx.fillStyle = black ? "#f4f1ea" : "#1a1a1a";
+      ctx.font = `${fs}px system-ui`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(ring, c, c - rm); ctx.fillText(ring, c - rm, c); ctx.fillText(ring, c + rm, c);
+    }
+  }
+  const P = (h, v) => [c + h * k, c - v * k];
+  const dot = (h, v, rad, fill, stroke) => {
+    const [x, y] = P(h, v);
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2);
+    ctx.fillStyle = fill; ctx.fill();
+    if (stroke) { ctx.lineWidth = W / 300; ctx.strokeStyle = stroke; ctx.stroke(); }
+  };
+  const path = (pts, color, width) => {
+    if (pts.length < 2) return;
+    ctx.beginPath();
+    pts.forEach(([h, v], i) => { const [x, y] = P(h, v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+  };
+  const label = (n, h, v, rad) => {
+    ctx.fillStyle = "#fff"; ctx.font = `bold ${Math.round(rad * 1.1)}px system-ui`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const [x, y] = P(h, v); ctx.fillText(n, x, y + 1);
+  };
+  const shots = viewShots(), idx = viewIndex(shots);
+  const hitR = Math.max(W / 80, t.bullet * k);
+  const numbered = settings.app === "match";
+  shots.forEach((s, i) => {
+    if (i === idx) return;
+    dot(s.hit[0], s.hit[1], hitR, "rgba(74,163,255,.6)", "rgba(255,255,255,.9)");
+    if (numbered) label(i + 1, s.hit[0], s.hit[1], hitR);
+  });
+  const s = shots[idx];
+  if (s) {
+    if (s.trace && settings.shotView === "line") {
+      ctx.lineCap = "round";
+      path([[0, 0], s.hit], GRADE_COLORS[grade(s.dec).cls], W / 140);
+      const [ax, ay] = P(0, 0), cl = W / 60;
+      ctx.strokeStyle = "#3fb68b"; ctx.lineWidth = W / 350;
+      ctx.beginPath(); ctx.moveTo(ax - cl, ay); ctx.lineTo(ax + cl, ay); ctx.moveTo(ax, ay - cl); ctx.lineTo(ax, ay + cl); ctx.stroke();
+    } else if (s.trace) {
+      ctx.lineJoin = "round"; ctx.lineCap = "round";
+      path(s.trace.slice(0, PULL_AT + 1), "#4aa3ff", W / 260);
+      path(s.trace.slice(PULL_AT, PRE).concat([s.hit]), "#c03bd6", W / 180);
+      if (s.mode !== 1) path([s.hit].concat(s.trace.slice(PRE)), "#ff9d2e", W / 260);
+      const [ax, ay] = P(0, 0), cl = W / 60;
+      ctx.strokeStyle = "#3fb68b"; ctx.lineWidth = W / 350;
+      ctx.beginPath(); ctx.moveTo(ax - cl, ay); ctx.lineTo(ax + cl, ay); ctx.moveTo(ax, ay - cl); ctx.lineTo(ax, ay + cl); ctx.stroke();
+    }
+    dot(s.hit[0], s.hit[1], hitR * 1.15, "#e0564f", "#fff");
+    label(idx + 1, s.hit[0], s.hit[1], hitR * 1.15);
+  }
+  if (settings.live && live && device && !calFlag) {
+    // außerhalb der Scheibe: als Ring am Rand anzeigen (Richtung bleibt sichtbar)
+    const lim = (t.r10 + 9 * t.step) * 1.02 / zoom, d = Math.hypot(live[0], live[1]);
+    if (d > lim) {
+      const [x, y] = P(live[0] / d * lim, live[1] / d * lim);
+      ctx.beginPath(); ctx.arc(x, y, W / 60, 0, Math.PI * 2);
+      ctx.lineWidth = W / 220; ctx.strokeStyle = "rgba(63,182,139,.95)"; ctx.stroke();
+    } else dot(live[0], live[1], W / 80, "rgba(63,182,139,.9)", "rgba(255,255,255,.8)");
+  }
+  requestAnimationFrame(draw);
+}
+
+// =====================================================================
+// Web Bluetooth
+// =====================================================================
+let device = null, cmdChar = null;
+const chunkBuf = new Map(); // Schussnummer -> { pts, got, t }
+
+let knownDevice = null;     // zuletzt verbundener Sensor (für automatisches Wiederverbinden)
+let userDisconnect = false;  // Trennen per Knopf: kein Fenster, kein Wiederverbinden
+let retryAbort = false;
+
+// Sensor auswählen (braucht einen Tipp des Nutzers – Vorgabe von Web Bluetooth)
+async function connect() {
+  if (!navigator.bluetooth) { showConn("nobt"); return; }
+  retryAbort = true;                         // laufende Wiederverbindung abbrechen
+  try {
+    const dev = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "Abzug" }], optionalServices: [SVC_UUID] });
+    useDevice(dev);
+    showConn("connecting");
+    await withTimeout(openGatt(), 15000);
+    hideConn();
+  } catch (e) {
+    if (device && device.gatt.connected) return;
+    device = null; setDisconnectedUi();
+    if (e.name === "NotFoundError") hideConn();               // Auswahl abgebrochen
+    else showConn("gone", e.message);
+  }
+  updateWakeLock(); updateUi();
+}
+function useDevice(dev) {
+  if (knownDevice !== dev) {
+    if (knownDevice) knownDevice.removeEventListener("gattserverdisconnected", onDisconnect);
+    dev.addEventListener("gattserverdisconnected", onDisconnect);
+  }
+  knownDevice = dev; device = dev; userDisconnect = false;
+}
+function withTimeout(promise, ms) {
+  let tm;
+  return Promise.race([promise, new Promise((_, rej) => { tm = setTimeout(() => rej(new Error("Zeitüberschreitung")), ms); })])
+    .finally(() => clearTimeout(tm));
+}
+
+async function openGatt() {
+  setStatus("verbinde …", "busy");
+  fwAdopted = false;
+  const server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(SVC_UUID);
+  const liveC = await svc.getCharacteristic(LIVE_UUID);
+  const shotC = await svc.getCharacteristic(SHOT_UUID);
+  cmdChar = await svc.getCharacteristic(CMD_UUID);
+  let evtC = null;
+  try { evtC = await svc.getCharacteristic(EVT_UUID); } catch (e) { toast("Alte Sensor-Firmware – bitte aktualisieren"); }
+  // Handler zuweisen (nicht addEventListener): nach einem Wiederverbinden sonst doppelt
+  liveC.oncharacteristicvaluechanged = e => {
+    const d = e.target.value;
+    if (d.byteLength < 8) return;
+    onLive(d.getInt16(0, true) / 1000, d.getInt16(2, true) / 1000, d.getInt16(4, true) / 1000, d.getUint8(6), d.getUint8(7));
+    if (d.byteLength >= 10) onBattery(d.getUint16(8, true));
+  };
+  shotC.oncharacteristicvaluechanged = e => onShotChunk(e.target.value);
+  await liveC.startNotifications();
+  await shotC.startNotifications();
+  if (evtC) {
+    evtC.oncharacteristicvaluechanged = e => onEvent(e.target.value);
+    await evtC.startNotifications();
+  }
+  setStatus("verbunden", "ok");
+  $("btnConnect").textContent = "Trennen";
+  $("btnConnect").classList.remove("primary");
+  setText("connDesc", "Verbunden und bereit.");
+  justConnected = true;            // nach den ersten Sensordaten zur Scheibe wechseln
+  updateUi();
+}
+
+// Schuss-Verlauf kommt in 24 Paketen; erst wenn alle da sind, wird der Treffer gezeichnet
+function onShotChunk(d) {
+  if (d.byteLength < 2 + PTS_PER_CHUNK * 6) return;
+  const no = d.getUint8(0), idx = d.getUint8(1);
+  if (idx >= N_CHUNKS) return;
+  const now = Date.now();
+  for (const [key, v] of chunkBuf) if (now - v.t > 3000) chunkBuf.delete(key);
+  if (!chunkBuf.has(no)) chunkBuf.set(no, { pts: new Array(N_POINTS), got: new Set(), t: now });
+  const b = chunkBuf.get(no);
+  for (let p = 0; p < PTS_PER_CHUNK; p++) {
+    const o = 2 + p * 6;
+    b.pts[idx * PTS_PER_CHUNK + p] = [d.getInt16(o, true) / 1000, d.getInt16(o + 2, true) / 1000, d.getInt16(o + 4, true) / 1000];
+  }
+  b.got.add(idx);
+  if (b.got.size === N_CHUNKS) {
+    chunkBuf.delete(no);
+    const meta = pendingMeta.get(no) || null; pendingMeta.delete(no);
+    if (calOpen) return;           // während des Ausrichtens keine Schüsse zählen
+    addShot(b.pts, meta);
+  }
+}
+
+function setDisconnectedUi() {
+  setStatus("nicht verbunden"); $("fwSync").textContent = "";
+  setText("connDesc", navigator.bluetooth ? "Sensor einschalten (Taster 2 s halten), dann verbinden."
+    : location.protocol !== "https:" && location.hostname !== "localhost" ? "Bluetooth funktioniert nur, wenn die Seite über https geöffnet wird."
+    : "Dieser Browser kann kein Web Bluetooth. Bitte Chrome oder Edge verwenden (am iPhone: Bluefy).");
+  battMv = 0; showBattery();
+  $("btnConnect").textContent = "Verbinden"; $("btnConnect").classList.add("primary");
+}
+// Verbindung abgerissen: sofort melden und im Hintergrund bis zu 2 Minuten neu verbinden
+let reconnecting = false;
+async function onDisconnect() {
+  cmdChar = null; $("fwSync").textContent = "";
+  chunkBuf.clear();
+  if (calOpen) closeCal();
+  if (userDisconnect || !knownDevice || reconnecting) return;
+  device = null; live = null;
+  setDisconnectedUi(); setStatus("getrennt", "busy");
+  updateWakeLock(); updateUi();
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  if (settings.beep) { beep(700, 140); beep(500, 220, 0.18); }
+  autoReconnect("lost");
+}
+async function autoReconnect(kind) {
+  const dev = knownDevice;
+  if (!dev || reconnecting) return;
+  reconnecting = true; retryAbort = false;
+  const t0 = Date.now(), limit = kind === "auto" ? 20000 : 120000;   // beim Start nur kurz suchen
+  let n = 0;
+  while (!retryAbort && Date.now() - t0 < limit) {
+    n++;
+    if (kind === "auto") setStatus("sucht Sensor …", "busy"); else showConn(kind, n);
+    try {
+      device = dev; userDisconnect = false;
+      await withTimeout(openGatt(), 10000);
+      reconnecting = false;
+      hideConn();
+      if (kind === "lost") toast("Wieder verbunden");
+      updateWakeLock();
+      return;
+    } catch (e) {
+      if (retryAbort) break;      // Nutzer verbindet inzwischen selbst – dessen Verbindung nicht stören
+      device = null; cmdChar = null;
+      try { dev.gatt.disconnect(); } catch (e2) {}
+      setDisconnectedUi(); setStatus(kind === "lost" ? "getrennt" : "kein Sensor", kind === "lost" ? "busy" : "");
+      for (let w = 0; w < 25 && !retryAbort; w++) await sleep(100);
+    }
+  }
+  reconnecting = false;
+  if (!retryAbort && kind !== "auto") showConn("gone");
+  if (!device) setDisconnectedUi();
+  updateWakeLock(); updateUi();
+}
+function disconnect() {
+  const d = device; device = null; cmdChar = null; live = null;
+  userDisconnect = true; retryAbort = true;
+  if (calOpen) closeCal();
+  if (d && d.gatt.connected) d.gatt.disconnect();
+  setDisconnectedUi(); updateWakeLock(); updateUi();
+}
+
+// ---------- Verbindungs-Fenster ----------
+function showConn(kind, info) {
+  const T = {
+    start:      ["Sensor verbinden", "Sensor einschalten (Taster 2 s halten), dann verbinden.", false, "Später", "Verbinden"],
+    connecting: ["Verbinde …", "Verbindung zum Sensor wird aufgebaut.", true, "Abbrechen", ""],
+    auto:       ["Verbinde mit dem Sensor …", "Der zuletzt benutzte Sensor wird gesucht" + (info > 1 ? ` (Versuch ${info})` : "") + ".", true, "Abbrechen", "Anderen wählen"],
+    lost:       ["Verbindung verloren", "Der Sensor wird gesucht" + (info > 1 ? ` (Versuch ${info})` : "") + ". Ist er eingeschaltet und in der Nähe?", true, "Abbrechen", "Neu wählen"],
+    gone:       ["Sensor nicht erreichbar", (info ? info + ". " : "") + "Sensor einschalten oder am Taster kurz drücken (macht ihn 2 Minuten sichtbar), dann verbinden.", false, "Später", "Verbinden"],
+    nobt:       ["Kein Bluetooth", location.protocol !== "https:" && location.hostname !== "localhost"
+                  ? "Bluetooth funktioniert nur, wenn die Seite über https geöffnet wird."
+                  : "Dieser Browser kann kein Web Bluetooth. Bitte Chrome oder Edge verwenden (am iPhone: Bluefy).", false, "Schließen", ""],
+  }[kind];
+  $("connTitle").textContent = T[0];
+  $("connText").textContent = T[1];
+  $("connBusy").hidden = !T[2];
+  $("connLater").textContent = T[3];
+  $("connGo").textContent = T[4]; $("connGo").hidden = !T[4];
+  const bad = kind === "lost" || kind === "gone" || kind === "nobt";
+  $("connIcon").className = "connIcon" + (bad ? " lost" : "");
+  $("connUse").setAttribute("href", bad ? "#i-btoff" : "#i-bt");
+  $("conn").hidden = false;
+}
+function hideConn() { $("conn").hidden = true; }
+$("connLater").onclick = () => {
+  retryAbort = true; hideConn();
+  if (!device) setDisconnectedUi();
+};
+$("connGo").onclick = () => { unlockAudio(); connect(); };
+
+// Beim Start: zuletzt benutzten Sensor ohne Auswahl-Dialog verbinden (wenn der Browser das erlaubt),
+// sonst das Verbinden-Fenster zeigen
+async function startupConnect() {
+  setDisconnectedUi();
+  goPage(1);
+  if (!navigator.bluetooth) return;
+  try {
+    if (navigator.bluetooth.getDevices) {
+      const devs = await navigator.bluetooth.getDevices();
+      const dev = devs.find(d => (d.name || "").startsWith("Abzug"));
+      if (dev) { useDevice(dev); device = null; autoReconnect("auto"); return; }
+    }
+  } catch (e) {}
+}
+
+// Befehle nacheinander senden (Web Bluetooth erlaubt nur einen Vorgang gleichzeitig)
+let cmdQueue = Promise.resolve();
+function sendCmd(bytes) {
+  if (!cmdChar) { if (bytes[0] === CMD.CAL || bytes[0] === CMD.RESET) toast("Sensor nicht verbunden"); return Promise.resolve(); }
+  const buf = new Uint8Array(2); buf.set(bytes.slice(0, 2));
+  cmdQueue = cmdQueue.then(async () => {
+    const c = cmdChar; if (!c) return;
+    try { await c.writeValue(buf); }
+    catch (e) { await sleep(150); try { await c.writeValue(buf); } catch (e2) { toast("Senden fehlgeschlagen"); } }
+  });
+  return cmdQueue;
+}
+
+$("btnConnect").onclick = () => { unlockAudio(); device ? disconnect() : connect(); };
+$("btnQuick").onclick = () => { unlockAudio(); connect(); };
+$("btnReset").onclick = () => {
+  if (!device) { toast("Sensor nicht verbunden"); return; }
+  if (!confirm("Munition und Erkennung auf Standard setzen und den Nullpunkt neu messen? Die Ausrichtung bleibt. Waffe ruhig ablegen.")) return;
+  sendCmd([CMD.RESET, 0]).then(() => { fwAdopted = false; });
+};
+
+// =====================================================================
+// Ausrichtungs-Assistent
+// Nullpunkt → nach rechts schwenken → Mündung heben → prüfen → im Sensor speichern
+// =====================================================================
+const CAL_DEG = 8;                 // so weit muss eine Bewegung gehen
+let calOpen = false, calStep = 0, calTimer = null, calBase = null, calRes = {};
+
+function openCal(auto) {
+  if (!device || !cmdChar) { toast("Bitte zuerst den Sensor verbinden"); return; }
+  calOpen = true; calStep = 0; calRes = {};
+  $("cal").hidden = false;
+  calShowStep(auto ? "Der Sensor ist noch nicht ausgerichtet – einmalig nötig, dauert etwa 20 Sekunden." : "");
+}
+function closeCal() {
+  calOpen = false; clearInterval(calTimer); calTimer = null;
+  $("cal").hidden = true;
+}
+function calSteps(active) {
+  [...$("calSteps").children].forEach((d, i) => { d.className = i < active ? "done" : i === active ? "active" : ""; });
+}
+function calSetBars(d, hitAxis) {
+  [...$("calAxes").children].forEach((row, i) => {
+    const f = row.querySelector(".fill"), v = d ? d[i] : 0;
+    const w = Math.min(50, Math.abs(v) / (CAL_DEG * 1.5) * 50);
+    f.style.left = (v >= 0 ? 50 : 50 - w) + "%"; f.style.width = w + "%";
+    f.classList.toggle("hit", i === hitAxis);
+    row.querySelector("span").textContent = (v >= 0 ? "+" : "−") + fmt1(Math.abs(v)) + "°";
+  });
+}
+function calUi(title, text, main) {
+  $("calTitle").textContent = title; $("calText").textContent = text;
+  $("calMain").textContent = main || ""; $("calMain").hidden = !main; $("calMain").disabled = false;
+  $("calErr").textContent = "";
+}
+function calShowStep(note) {
+  clearInterval(calTimer); calTimer = null;
+  calSteps(calStep);
+  $("calAxes").hidden = calStep === 0 || calStep === 3;
+  $("calCheck").hidden = calStep !== 3;
+  $("calProgWrap").hidden = calStep !== 0;
+  $("calResult").textContent = "";
+  $("calProg").style.width = "0";
+  calSetBars(null, -1);
+  if (calStep === 0) {
+    calUi("Nullpunkt", (note ? note + " " : "") + "Waffe ruhig ablegen und nicht berühren.", "Messen");
+  } else if (calStep === 1) {
+    calUi("Horizontal", "Waffe in Anschlag nehmen und gleichmäßig etwa 10° nach rechts schwenken.");
+    calTrack([0, 1, 2], res => { calRes.h = res; calStep = 2; calShowStep(); });
+  } else if (calStep === 2) {
+    calUi("Vertikal", "Zurück in die Zielposition, dann die Mündung gleichmäßig etwa 10° anheben.");
+    calTrack([0, 1, 2].filter(a => a !== calRes.h.axis), res => { calRes.v = res; calStep = 3; calShowStep(); });
+  } else {
+    calRes.hSel = (calRes.h.sign < 0 ? "-" : "") + calRes.h.axis;
+    calRes.vSel = (calRes.v.sign < 0 ? "-" : "") + calRes.v.axis;
+    calUi("Prüfen", "Waffe bewegen: Der Punkt muss in dieselbe Richtung wandern wie die Mündung.", "Speichern");
+    $("calResult").textContent = `horizontal ${axName(calRes.hSel)} · vertikal ${axName(calRes.vSel)} · Lauf ${AX[3 - calRes.h.axis - calRes.v.axis]}`;
+    calCheckStart();
+  }
+}
+// verfolgt die Drehung seit Beginn des Schritts; meldet die Achse, sobald eine eindeutig > CAL_DEG ist
+function calTrack(allowed, done) {
+  calBase = rotAcc.slice();
+  calTimer = setInterval(() => {
+    const d = rotAcc.map((v, i) => v - calBase[i]);
+    let m = allowed[0];
+    allowed.forEach(a => { if (Math.abs(d[a]) > Math.abs(d[m])) m = a; });
+    calSetBars(d, Math.abs(d[m]) > CAL_DEG * 0.5 ? m : -1);
+    if (Math.abs(d[m]) < CAL_DEG) return;
+    const second = Math.max(0, ...allowed.filter(a => a !== m).map(a => Math.abs(d[a])));
+    if (second > Math.abs(d[m]) * 0.6) {           // Bewegung nicht eindeutig: Schritt neu beginnen
+      $("calErr").textContent = "Bewegung nicht eindeutig – bitte nur in die angegebene Richtung bewegen.";
+      calBase = rotAcc.slice();
+      return;
+    }
+    clearInterval(calTimer); calTimer = null;
+    if (navigator.vibrate) navigator.vibrate(25);
+    done({ axis: m, sign: Math.sign(d[m]) });
+  }, 40);
+}
+// Nullpunkt im Sensor messen (dauert ca. 2,3 s)
+async function calZero() {
+  $("calMain").disabled = true;
+  $("calText").textContent = "Messung läuft – nicht bewegen.";
+  await sendCmd([CMD.CAL, 0]);
+  let t0 = Date.now();
+  while (!calFlag && Date.now() - t0 < 1500 && calOpen) await sleep(40);
+  t0 = Date.now();
+  while (calFlag && calOpen) {
+    $("calProg").style.width = Math.min(100, (Date.now() - t0) / 2300 * 100) + "%";
+    if (Date.now() - t0 > 10000) { $("calErr").textContent = "Der Sensor antwortet nicht. Verbindung prüfen."; $("calMain").disabled = false; return; }
+    await sleep(40);
+  }
+  if (!calOpen) return;
+  $("calProg").style.width = "100%";
+  calStep = 1; calShowStep();
+}
+// Prüf-Ansicht: Punkt folgt der Waffe mit der gefundenen Ausrichtung
+function calCheckStart() {
+  const c = $("calCheck"), g = c.getContext("2d");
+  const W = c.width = c.height = Math.round(c.clientWidth * (window.devicePixelRatio || 1)) || 400;
+  const css = getComputedStyle(document.documentElement);
+  const colLine = css.getPropertyValue("--line").trim(), colDot = css.getPropertyValue("--accent").trim();
+  calBase = rotAcc.slice();
+  let pos = [0, 0];
+  calTimer = setInterval(() => {
+    const d = rotAcc.map((v, i) => v - calBase[i]);
+    const tgt = [axisPick(calRes.hSel, d), axisPick(calRes.vSel, d)];
+    calBase = calBase.map((b, i) => b + (rotAcc[i] - b) * 0.02);   // langsam zurück zur Mitte
+    pos = [pos[0] + (tgt[0] - pos[0]) * 0.5, pos[1] + (tgt[1] - pos[1]) * 0.5];
+    g.clearRect(0, 0, W, W);
+    g.strokeStyle = colLine; g.lineWidth = W / 200;
+    [0.15, 0.3, 0.45].forEach(r => { g.beginPath(); g.arc(W / 2, W / 2, W * r, 0, Math.PI * 2); g.stroke(); });
+    g.beginPath(); g.moveTo(W / 2, W * 0.04); g.lineTo(W / 2, W * 0.96); g.moveTo(W * 0.04, W / 2); g.lineTo(W * 0.96, W / 2); g.stroke();
+    const sc = W * 0.45 / 10;                  // ±10° bis zum Rand
+    const x = W / 2 + Math.max(-10, Math.min(10, pos[0])) * sc, y = W / 2 - Math.max(-10, Math.min(10, pos[1])) * sc;
+    g.fillStyle = colDot; g.beginPath(); g.arc(x, y, W / 28, 0, Math.PI * 2); g.fill();
+  }, 30);
+}
+async function calSave() {
+  settings.h = calRes.hSel; settings.v = calRes.vSel; settings.axesDone = true;
+  saveSettings();
+  lastSent = Date.now();
+  await sendCmd([CMD.AXES, axesByte()]);
+  recomputeAll();
+  closeCal();
+  toast("Ausrichtung im Sensor gespeichert");
+  goPage(2);
+}
+$("calMain").onclick = () => { if (calStep === 0) calZero(); else if (calStep === 3) calSave(); };
+$("calCancel").onclick = closeCal;
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeDistPop(); if (calOpen) closeCal(); } });
+$("btnCal").onclick = () => openCal(false);
+
+// =====================================================================
+// Start
+// =====================================================================
+if (match) {
+  match.turn = (match.turn || []).filter(s => s && s.hit);
+  match.view = (match.view || []).filter(s => s && s.hit);
+}
+series.shots = series.shots.filter(s => Array.isArray(s.raw) && s.raw.length === N_POINTS);
+series.shots.forEach(evalShot);
+renderEvents();
+updateUi();
+requestAnimationFrame(draw);
+startupConnect();
+
+// =====================================================================
+// Als App installieren (PWA)
+// =====================================================================
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+// Installiert? Dann läuft die Seite ohne Browserleiste.
+let installPrompt = null;
+const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+// Was kann man hier tun? -> { text, canPrompt }
+function installState() {
+  if (isStandalone()) return { text: "Läuft als installierte App.", canPrompt: false, done: true };
+  if (!window.isSecureContext) return { text: "Nur möglich, wenn die Seite über https geöffnet ist (z. B. GitHub Pages).", canPrompt: false };
+  if (installPrompt) return { text: "Symbol auf dem Startbildschirm, startet ohne Browserleiste.", canPrompt: true };
+  if (isIos) return { text: "Im Browser auf „Teilen“ tippen, dann „Zum Home-Bildschirm“.", canPrompt: false };
+  return { text: "Im Browser-Menü (⋮) „App installieren“ bzw. „Zum Startbildschirm hinzufügen“ wählen. Schon installiert? Dann über das Symbol öffnen.", canPrompt: false };
+}
+function showInstall() {
+  const st = installState();
+  $("installInfo").textContent = st.text;
+  $("btnInstall").hidden = !st.canPrompt;
+  $("instText").textContent = st.canPrompt ? "Startet dann wie eine normale App, ohne Browserleiste." : st.text;
+  $("instGo").hidden = !st.canPrompt;
+  $("instNo").textContent = st.canPrompt ? "Nicht jetzt" : "OK";
+}
+async function doInstall() {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => {});
+  installPrompt = null; $("instBar").hidden = true; showInstall();
+}
+// beim ersten Start einmal fragen (nur wenn noch nicht installiert und über https)
+function offerInstall() {
+  const st = installState();
+  if (st.done || !window.isSecureContext || store.get("abzug.instAsked", false)) return;
+  showInstall();
+  $("instBar").hidden = false;
+}
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault(); installPrompt = e; showInstall();
+  if (!$("instBar").hidden || !store.get("abzug.instAsked", false)) offerInstall();
+});
+window.addEventListener("appinstalled", () => { installPrompt = null; $("instBar").hidden = true; showInstall(); toast("App installiert"); });
+$("btnInstall").onclick = doInstall;
+$("instGo").onclick = doInstall;
+$("instNo").onclick = () => { store.set("abzug.instAsked", true); $("instBar").hidden = true; };
+showInstall();
+// Chrome meldet die Installierbarkeit erst nach einem Moment; sonst nach 4 s die Anleitung zeigen
+setTimeout(() => { if (!installPrompt) offerInstall(); }, 4000);
+</script>
+</body>
+</html>
